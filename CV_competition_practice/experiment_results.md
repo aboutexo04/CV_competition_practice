@@ -256,3 +256,64 @@
 
 -----------------------------------------------------
 
+### effnet-b0_006
+
+**실행 시간**: 2025-10-29 17:29:53  
+**데이터 모드**: 10.0% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+### effnet-b0_006
+
+**실행 시간**: 2025-10-29 17:30:38  
+**데이터 모드**: 10.0% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 10  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 5 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.9055  
+- Fold 2: Val F1 = 0.9052  
+- Fold 3: Val F1 = 0.8872  
+- Fold 4: Val F1 = 0.8897  
+- Fold 5: Val F1 = 0.8985  
+- Average: 0.8972 ± 0.0076  
+
+**Test Results**:  
+- Accuracy: 91.30%  
+- Macro F1: 0.9125  
+
+-----------------------------------------------------
+
+### effnet-b0_006
+
+**실행 시간**: 2025-10-29 18:02:55  
+**데이터 모드**: 10.0% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 10  
+- Batch Size: 32  
+- Learning Rate: 0.0008  
+- K-Fold: 5 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.8815  
+- Fold 2: Val F1 = 0.9177  
+- Fold 3: Val F1 = 0.9217  
+- Fold 4: Val F1 = 0.9056  
+- Fold 5: Val F1 = 0.8947  
+- Average: 0.9042 ± 0.0148  
+
+**Test Results**:  
+- Accuracy: 92.00%  
+- Macro F1: 0.9196  
+
+-----------------------------------------------------
+
