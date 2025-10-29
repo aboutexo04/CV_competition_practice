@@ -317,3 +317,27 @@
 
 -----------------------------------------------------
 
+### effnet-b0_010
+
+**실행 시간**: 2025-10-29 22:27:35  
+**데이터 모드**: 10.0% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.9009  
+- Fold 2: Val F1 = 0.8961  
+- Average: 0.8985 ± 0.0024  
+
+**Test Results**:  
+- Accuracy: 90.90%  
+- Macro F1: 0.9068  
+
+-----------------------------------------------------
+

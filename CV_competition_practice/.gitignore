@@ -43,6 +43,7 @@ env/
 
 # Data files
 data/
+data/raw/
 *.csv
 *.json
 *.parquet
@@ -66,6 +67,9 @@ wandb/
 # Logs
 logs/
 *.log
+
+# Outputs
+outputs/
 
 # Environment variables
 .env
