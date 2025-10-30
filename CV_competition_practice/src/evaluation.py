@@ -12,7 +12,8 @@ import torch
 from sklearn.metrics import f1_score, confusion_matrix
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+from src.config import config
+from src.model import get_model
 # 한글 폰트 설정
 if platform.system() == 'Darwin':  # macOS
     plt.rcParams['font.family'] = 'AppleGothic'
@@ -197,39 +198,25 @@ def _prepare_image_for_display(image):
     return img_np
 
 
-def evaluate_ensemble(fold_results, test_dataset, device, batch_size=32,
-                     model_creator=None, num_classes=10):
+def evaluate_ensemble(fold_results, test_dataset, config, device):
     """
-    K-Fold 모델들의 앙상블 평가
-
-    Args:
-        fold_results: K-Fold 학습 결과 리스트
-        test_dataset: 테스트 데이터셋
-        device: 디바이스
-        batch_size: 배치 크기
-        model_creator: 모델 생성 함수
-        num_classes: 클래스 수
-
-    Returns:
-        test_acc: 테스트 정확도
-        test_f1: 테스트 F1 스코어
-        ensemble_preds: 앙상블 예측 결과
-        test_labels: 실제 레이블
+    K-Fold 모델들의 앙상블 평가 (Config 기반)
     """
+    from src.model import get_model
+    
+    # ✅ config에서 필요한 값 가져오기
+    batch_size = config.BATCH_SIZE
+    num_classes = config.NUM_CLASSES
+    model_name = config.MODEL_NAME
+    
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     print("🔮 앙상블 예측 시작...")
     all_predictions = []
 
     for fold_idx, fold_result in enumerate(fold_results):
-        # 모델 생성 및 가중치 로드
-        if model_creator is None:
-            import timm
-            from src.config import MODEL_NAME
-            fold_model = timm.create_model(MODEL_NAME, pretrained=False, num_classes=num_classes)
-        else:
-            fold_model = model_creator()
-
+        # ✅ get_model 사용
+        fold_model = get_model(model_name, num_classes, pretrained=False)
         fold_model.load_state_dict(fold_result['best_model_state'])
         fold_model = fold_model.to(device)
         fold_model.eval()
@@ -264,6 +251,7 @@ def evaluate_ensemble(fold_results, test_dataset, device, batch_size=32,
     print("=" * 70)
 
     return test_acc, test_f1, ensemble_preds, test_labels
+
 
 
 def plot_training_curves(fold_results):
@@ -499,24 +487,10 @@ def analyze_misclassifications(test_dataset_raw, test_labels, predictions, class
     plt.show()
     print("✅ 클래스별 오분류 비율 시각화 완료!")
 
-
-def run_full_evaluation(fold_results, test_dataset, test_dataset_raw, class_names,
-                       device, batch_size=32, num_classes=10, use_wandb=True):
+def run_full_evaluation(fold_results, test_dataset, class_names, config,
+                       device, use_wandb=False):
     """
-    전체 평가 프로세스를 한 번에 실행
-
-    Args:
-        fold_results: K-Fold 학습 결과
-        test_dataset: 테스트 데이터셋 (transform 적용)
-        test_dataset_raw: 원본 테스트 데이터셋 (transform 없음)
-        class_names: 클래스 이름 리스트
-        device: 디바이스
-        batch_size: 배치 크기
-        num_classes: 클래스 수
-        use_wandb: Wandb 로깅 여부
-
-    Returns:
-        results: 평가 결과 딕셔너리
+    전체 평가 프로세스를 한 번에 실행 (Config 기반)
     """
     print("=" * 70)
     print("🚀 전체 평가 프로세스 시작")
@@ -526,9 +500,8 @@ def run_full_evaluation(fold_results, test_dataset, test_dataset_raw, class_name
     test_acc, test_f1, ensemble_preds, test_labels = evaluate_ensemble(
         fold_results=fold_results,
         test_dataset=test_dataset,
-        device=device,
-        batch_size=batch_size,
-        num_classes=num_classes
+        config=config,
+        device=device
     )
 
     # Wandb 로깅
@@ -549,6 +522,12 @@ def run_full_evaluation(fold_results, test_dataset, test_dataset_raw, class_name
 
     # 4. 오분류 분석
     print("\n🔍 오분류 분석...")
+    
+    # ✅ test_dataset_raw 가져오기
+    from src.data import load_data
+    _, test_dataset_raw, _, _, _ = load_data(config)
+    test_dataset_raw.transform = None  # transform 제거
+    
     analyze_misclassifications(
         test_dataset_raw=test_dataset_raw,
         test_labels=test_labels,
