@@ -399,34 +399,6 @@ def get_dataloaders(train_dataset_raw, train_labels, test_dataset, config):
     )
     
     return test_loader
-
-
-# ============================================
-# 전역 변수로 데이터 로드 (backward compatibility)
-# ============================================
-
-# Config import
-# try:
-#     from .config import config
-    
-#     # 데이터 로드
-#     train_dataset_raw, test_dataset, train_labels, class_names, num_classes = load_cifar10(config)
-    
-#     # Device 설정 (config에서)
-#     device = config.DEVICE
-    
-#     # Augmentation
-#     train_transform = get_train_augmentation(config)
-#     val_transform = get_val_augmentation(config.IMAGE_SIZE)
-    
-#     print(f"\n🖥️  Device: {device}")
-#     print("="*60)
-    
-# except ImportError:
-#     print("⚠️  Config not found. Please import manually.")
-
-# src/data.py 맨 끝에 추가 (기존 코드 뒤에)
-
 # ============================================
 # 통합 데이터 로딩 함수
 # ============================================
@@ -457,74 +429,7 @@ def load_data(config):
 
 
 def load_document_data(config):
-    """
-    문서 분류 대회 데이터 로드
-    
-    Args:
-        config: Config 객체
-        
-    Returns:
-        train_dataset_raw, test_dataset, train_labels, class_names, num_classes
-    """
-    print("="*60)
-    print("📄 Loading Document Classification Data")
-    print("="*60)
-    
-    # 데이터 경로
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent
-    data_dir = project_root / 'data' / 'document_competition'
-    
-    if not data_dir.exists():
-        raise FileNotFoundError(
-            f"❌ Document data not found at {data_dir}\n"
-            f"Please download competition data first."
-        )
-    
-    # TODO: 대회 시작하면 아래 구현
-    # 
-    # 예시 구조:
-    # 
-    # class DocumentDataset(Dataset):
-    #     def __init__(self, data_dir, transform=None):
-    #         # CSV 또는 이미지 폴더에서 로드
-    #         self.image_paths = list(data_dir.glob('*.jpg'))
-    #         self.labels = pd.read_csv(data_dir / 'labels.csv')
-    #         self.transform = transform
-    #     
-    #     def __getitem__(self, idx):
-    #         img = cv2.imread(str(self.image_paths[idx]))
-    #         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #         label = self.labels.iloc[idx]['label']
-    #         
-    #         if self.transform:
-    #             augmented = self.transform(image=img)
-    #             img = augmented['image']
-    #         
-    #         return img, label
-    # 
-    # train_dataset_raw = DocumentDataset(
-    #     data_dir / 'train',
-    #     transform=None
-    # )
-    # 
-    # test_dataset = DocumentDataset(
-    #     data_dir / 'test',
-    #     transform=get_val_augmentation(config.IMAGE_SIZE)
-    # )
-    # 
-    # train_labels = train_dataset_raw.labels.tolist()
-    # class_names = ['class_0', 'class_1', ...]  # 대회 공지 참고
-    # num_classes = len(class_names)
-    # 
-    # # 서브샘플링 (필요시)
-    # if config.USE_SUBSET:
-    #     train_indices = _stratified_subsample(train_labels, config.SUBSET_RATIO)
-    #     train_dataset_raw = Subset(train_dataset_raw, train_indices)
-    #     train_labels = [train_labels[i] for i in train_indices]
-    # 
-    # return train_dataset_raw, test_dataset, train_labels, class_names, num_classes
-    
+    """문서 분류 대회 데이터 로드 (TODO: 대회 시작하면 구현)"""
     raise NotImplementedError(
         "📝 Document dataset loader not implemented yet.\n"
         "Implement this function when competition data is available.\n"
@@ -532,24 +437,4 @@ def load_document_data(config):
 def load_cifar100(config):
     """CIFAR-100 로더 (필요시 구현)"""
     raise NotImplementedError("CIFAR-100 loader not implemented yet.")
-# ============================================
-# 전역 변수로 데이터 로드 (backward compatibility)
-# ============================================
-
-# try:
-#     from .config import config
     
-#     # load_data() 사용으로 변경! ⭐
-#     train_dataset_raw, test_dataset, train_labels, class_names, num_classes = load_data(config)
-    
-#     device = config.DEVICE
-#     train_transform = get_train_augmentation(config)
-#     val_transform = get_val_augmentation(config.IMAGE_SIZE)
-    
-#     print(f"\n🖥️  Device: {device}")
-#     print("="*60)
-    
-# except ImportError:
-#     print("⚠️  Config not found. Please import manually.")
-# except NotImplementedError as e:
-#     print(f"⚠️  {e}")
