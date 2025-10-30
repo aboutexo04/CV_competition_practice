@@ -341,3 +341,147 @@
 
 -----------------------------------------------------
 
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:51:44  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:53:28  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:53:34  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:55:29  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:57:41  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 14:57:58  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7340  
+- Fold 2: Val F1 = 0.7953  
+- Average: 0.7647 ± 0.0307  
+
+**Test Results**:  
+- Accuracy: 83.60%  
+- Macro F1: 0.8356  
+
+-----------------------------------------------------
+
