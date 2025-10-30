@@ -12,8 +12,7 @@ import torch
 from sklearn.metrics import f1_score, confusion_matrix
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from src.config import config
-from src.model import get_model
+
 # 한글 폰트 설정
 if platform.system() == 'Darwin':  # macOS
     plt.rcParams['font.family'] = 'AppleGothic'
@@ -198,13 +197,21 @@ def _prepare_image_for_display(image):
     return img_np
 
 
-def evaluate_ensemble(fold_results, test_dataset, config, device):
+def evaluate_ensemble(fold_results, test_dataset, config):
     """
     K-Fold 모델들의 앙상블 평가 (Config 기반)
+    
+    Args:
+        fold_results: K-Fold 학습 결과
+        test_dataset: 테스트 데이터셋
+        config: Config 객체
+    
+    Returns:
+        test_acc, test_f1, ensemble_preds, test_labels
     """
     from src.model import get_model
     
-    # ✅ config에서 필요한 값 가져오기
+    device = config.DEVICE
     batch_size = config.BATCH_SIZE
     num_classes = config.NUM_CLASSES
     model_name = config.MODEL_NAME
@@ -215,7 +222,6 @@ def evaluate_ensemble(fold_results, test_dataset, config, device):
     all_predictions = []
 
     for fold_idx, fold_result in enumerate(fold_results):
-        # ✅ get_model 사용
         fold_model = get_model(model_name, num_classes, pretrained=False)
         fold_model.load_state_dict(fold_result['best_model_state'])
         fold_model = fold_model.to(device)
@@ -223,7 +229,7 @@ def evaluate_ensemble(fold_results, test_dataset, config, device):
 
         fold_preds = []
         with torch.no_grad():
-            for images, _ in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=False):
+            for images, labels in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=False):
                 images = images.to(device)
                 outputs = fold_model(images)
                 probs = torch.softmax(outputs, dim=1)
@@ -251,7 +257,6 @@ def evaluate_ensemble(fold_results, test_dataset, config, device):
     print("=" * 70)
 
     return test_acc, test_f1, ensemble_preds, test_labels
-
 
 
 def plot_training_curves(fold_results):
@@ -394,7 +399,6 @@ def analyze_misclassifications(test_dataset_raw, test_labels, predictions, class
         print("\n⚠️ 오분류 샘플 시각화를 위한 데이터셋이 없어 이미지를 표시하지 않습니다.")
     else:
         n_samples = min(max_samples, len(wrong_indices))
-        # numpy 1.16 이하 호환성을 위해 default_rng 대신 RandomState 사용
         rng = np.random.RandomState()
         selected_wrong_indices = rng.choice(wrong_indices, n_samples, replace=False)
 
@@ -487,11 +491,23 @@ def analyze_misclassifications(test_dataset_raw, test_labels, predictions, class
     plt.show()
     print("✅ 클래스별 오분류 비율 시각화 완료!")
 
-def run_full_evaluation(fold_results, test_dataset, class_names, config,
-                       device, use_wandb=False):
+
+def run_full_evaluation(fold_results, test_dataset, class_names, config):
     """
     전체 평가 프로세스를 한 번에 실행 (Config 기반)
+    
+    Args:
+        fold_results: K-Fold 학습 결과
+        test_dataset: 테스트 데이터셋
+        class_names: 클래스 이름 리스트
+        config: Config 객체
+        
+    Returns:
+        results: 평가 결과 딕셔너리
     """
+    device = config.DEVICE
+    use_wandb = config.USE_WANDB
+    
     print("=" * 70)
     print("🚀 전체 평가 프로세스 시작")
     print("=" * 70)
@@ -500,8 +516,7 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config,
     test_acc, test_f1, ensemble_preds, test_labels = evaluate_ensemble(
         fold_results=fold_results,
         test_dataset=test_dataset,
-        config=config,
-        device=device
+        config=config
     )
 
     # Wandb 로깅
@@ -523,10 +538,11 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config,
     # 4. 오분류 분석
     print("\n🔍 오분류 분석...")
     
-    # ✅ test_dataset_raw 가져오기
+    # test_dataset_raw 가져오기
     from src.data import load_data
     _, test_dataset_raw, _, _, _ = load_data(config)
-    test_dataset_raw.transform = None  # transform 제거
+    if hasattr(test_dataset_raw, 'transform'):
+        test_dataset_raw.transform = None  # transform 제거
     
     analyze_misclassifications(
         test_dataset_raw=test_dataset_raw,

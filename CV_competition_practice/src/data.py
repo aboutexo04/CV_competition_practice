@@ -6,15 +6,15 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import numpy as np
 from pathlib import Path
-import pickle
-import random
+import pandas as pd
+from PIL import Image
 
 # ============================================
 # Augmentation 함수들
 # ============================================
 
 def get_albumentations_train(img_size=224):
-    """일반 이미지용 augmentation (CIFAR-10 등)"""
+    """일반 이미지용 augmentation"""
     return A.Compose([
         A.Resize(img_size, img_size),
         
@@ -64,7 +64,7 @@ def get_augraphy_train(img_size=224):
         print("⚠️  Augraphy not installed. Falling back to Albumentations.")
         return get_albumentations_train(img_size)
     
-    # Augraphy 파이프라인 (이제 빨간 줄 안 나옴!)
+    # Augraphy 파이프라인
     ink_phase = [
         InkBleed(intensity_range=(0.1, 0.3), p=0.3),
     ]
@@ -92,9 +92,12 @@ def get_augraphy_train(img_size=224):
     ])
 
 
-
 def get_hybrid_train(img_size=224, augraphy_strength='light'):
     """Augraphy + Albumentations 혼합"""
+    
+    if not AUGRAPHY_AVAILABLE:
+        print("⚠️  Augraphy not installed. Falling back to Albumentations.")
+        return get_albumentations_train(img_size)
 
     # 강도별 확률
     if augraphy_strength == 'light':
@@ -158,9 +161,7 @@ def get_train_augmentation(config):
     
     # Auto 모드: 데이터셋에 맞게 자동 선택
     if strategy == 'auto':
-        if dataset_type in ['cifar10', 'cifar100', 'imagenet']:
-            strategy = 'albumentations'
-        elif dataset_type in ['document', 'text', 'ocr']:
+        if dataset_type in ['document', 'text', 'ocr']:
             strategy = 'hybrid'
         else:
             strategy = 'albumentations'
@@ -180,195 +181,55 @@ def get_train_augmentation(config):
 
 
 # ============================================
-# CIFAR10 Dataset
+# Document Dataset 클래스
 # ============================================
 
-class CIFAR10Dataset(Dataset):
+class DocumentDataset(Dataset):
     """
-    CIFAR10 데이터셋을 pickle 파일에서 직접 로드
+    문서 분류 대회용 Dataset
     
     Args:
-        data_dir: CIFAR10 데이터가 있는 디렉토리
-        train: True면 train 데이터, False면 test 데이터
+        df: train.csv DataFrame (ID, target 컬럼)
+        img_dir: 이미지 디렉토리 경로
         transform: Albumentations transform
-        indices: 사용할 인덱스 리스트 (서브샘플링용, None이면 전체)
+        indices: 사용할 인덱스 리스트 (K-Fold용, None이면 전체)
     """
-    def __init__(self, data_dir, train=True, transform=None, indices=None):
-        self.data_dir = Path(data_dir)
-        self.train = train
+    def __init__(self, df, img_dir, transform=None, indices=None):
+        self.img_dir = Path(img_dir)
         self.transform = transform
         
-        # CIFAR10 데이터 로드
-        self.data = []
-        self.labels = []
-        
-        if train:
-            # Train 데이터: data_batch_1 ~ data_batch_5
-            for i in range(1, 6):
-                batch_path = self.data_dir / f'data_batch_{i}'
-                with open(batch_path, 'rb') as f:
-                    batch = pickle.load(f, encoding='bytes')
-                    labels = batch.get(b'labels', batch.get('labels', []))
-                    batch_data = batch.get(b'data', batch.get('data', None))
-                    if batch_data is not None:
-                        self.data.append(batch_data)
-                        self.labels.extend(labels)
-            
-            self.data = np.vstack(self.data)  # (50000, 3072)
-        else:
-            # Test 데이터
-            batch_path = self.data_dir / 'test_batch'
-            with open(batch_path, 'rb') as f:
-                batch = pickle.load(f, encoding='bytes')
-                labels = batch.get(b'labels', batch.get('labels', []))
-                batch_data = batch.get(b'data', batch.get('data', None))
-                if batch_data is not None:
-                    self.data = batch_data
-                    self.labels = labels
-        
-        # 데이터 형태 변환 (3072 -> 32x32x3)
-        self.data = self.data.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
-        
-        # 특정 인덱스만 사용 (서브샘플링)
         if indices is not None:
-            self.data = self.data[indices]
-            self.labels = [self.labels[i] for i in indices]
+            self.df = df.iloc[indices].reset_index(drop=True)
             self.indices = indices
         else:
-            self.indices = list(range(len(self.data)))
+            self.df = df
+            self.indices = list(range(len(df)))
         
-        self.labels = np.array(self.labels)
+        self.image_ids = self.df['ID'].tolist()
+        self.labels = self.df['target'].tolist()
     
     def __len__(self):
-        return len(self.data)
+        return len(self.df)
     
     def __getitem__(self, idx):
-        image = self.data[idx]  # (32, 32, 3)
+        # 이미지 로드
+        img_id = self.image_ids[idx]
+        img_path = self.img_dir / img_id
+        
+        try:
+            image = Image.open(img_path).convert('RGB')
+            image = np.array(image)
+        except Exception as e:
+            print(f"⚠️  Error loading image {img_path}: {e}")
+            image = np.zeros((224, 224, 3), dtype=np.uint8)
+        
         label = int(self.labels[idx])
         
-        # Transform 적용
         if self.transform:
             augmented = self.transform(image=image)
             image = augmented['image']
         
         return image, label
-
-
-# ============================================
-# CIFAR10 데이터 로딩 함수
-# ============================================
-
-def load_cifar10(config):
-    """
-    Config 기반으로 CIFAR10 데이터 로드
-    
-    Args:
-        config: Config 객체
-        
-    Returns:
-        train_dataset_raw, test_dataset, train_labels, class_names, num_classes
-    """
-    print("="*60)
-    print("📦 Loading CIFAR10 Data")
-    print("="*60)
-    
-    # 데이터 경로 설정
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent
-    data_dir = project_root / 'data' / 'cifar-10-batches-py'
-    
-    # 전체 데이터 로드
-    train_data_full = CIFAR10Dataset(
-        data_dir=str(data_dir),
-        train=True,
-        transform=None
-    )
-    
-    test_data_full = CIFAR10Dataset(
-        data_dir=str(data_dir),
-        train=False,
-        transform=None
-    )
-    
-    # 클래스 이름 로드
-    meta_path = data_dir / 'batches.meta'
-    with open(meta_path, 'rb') as f:
-        meta = pickle.load(f, encoding='bytes')
-        if b'label_names' in meta:
-            class_names = [name.decode('utf-8') for name in meta[b'label_names']]
-        else:
-            class_names = [f'class_{i}' for i in range(10)]
-    
-    num_classes = len(class_names)
-    
-    print(f"\n✅ CIFAR10 Full Data Loaded!")
-    print(f"Train: {len(train_data_full):,} images")
-    print(f"Test:  {len(test_data_full):,} images")
-    print(f"Classes: {num_classes}")
-    print(f"Class names: {class_names}")
-    
-    # 서브샘플링 (config 기반)
-    if config.USE_SUBSET:
-        print(f"\n🔥 Subset mode: Using {int(config.SUBSET_RATIO*100)}% of data")
-        
-        # Train 서브샘플링
-        train_labels_full = train_data_full.labels.tolist()
-        train_indices = _stratified_subsample(
-            train_labels_full, 
-            ratio=config.SUBSET_RATIO
-        )
-        
-        train_dataset_raw = CIFAR10Dataset(
-            data_dir=str(data_dir),
-            train=True,
-            transform=None,
-            indices=train_indices
-        )
-        train_labels = [train_labels_full[i] for i in train_indices]
-        
-        # Test 서브샘플링
-        test_labels_full = test_data_full.labels.tolist()
-        test_indices = _stratified_subsample(
-            test_labels_full,
-            ratio=config.SUBSET_RATIO
-        )
-        
-        test_dataset = CIFAR10Dataset(
-            data_dir=str(data_dir),
-            train=False,
-            transform=get_val_augmentation(config.IMAGE_SIZE),
-            indices=test_indices
-        )
-        
-        print(f"✅ Subset train size: {len(train_dataset_raw):,}")
-        print(f"✅ Subset test size: {len(test_dataset):,}")
-    else:
-        train_dataset_raw = train_data_full
-        train_labels = train_data_full.labels.tolist()
-        test_dataset = CIFAR10Dataset(
-            data_dir=str(data_dir),
-            train=False,
-            transform=get_val_augmentation(config.IMAGE_SIZE)
-        )
-    
-    return train_dataset_raw, test_dataset, train_labels, class_names, num_classes
-
-
-def _stratified_subsample(labels, ratio):
-    """클래스별 균등 서브샘플링"""
-    indices_by_class = {}
-    for idx, label in enumerate(labels):
-        if label not in indices_by_class:
-            indices_by_class[label] = []
-        indices_by_class[label].append(idx)
-    
-    selected_indices = []
-    for label, indices in indices_by_class.items():
-        n_samples = int(len(indices) * ratio)
-        selected_indices.extend(random.sample(indices, n_samples))
-    
-    selected_indices.sort()
-    return selected_indices
 
 
 # ============================================
@@ -386,11 +247,12 @@ def get_dataloaders(train_dataset_raw, train_labels, test_dataset, config):
         config: Config 객체
         
     Returns:
-        train_loader, val_loader (for single split)
-        또는 K-Fold에서 직접 사용
+        test_loader (K-Fold에서 직접 train_loader 생성)
     """
-    # 이 함수는 K-Fold에서 직접 사용되므로
-    # 여기서는 test_loader만 생성
+    # test_dataset이 None이면 (대회 초기) None 반환
+    if test_dataset is None:
+        return None
+    
     test_loader = DataLoader(
         test_dataset,
         batch_size=config.BATCH_SIZE,
@@ -399,9 +261,80 @@ def get_dataloaders(train_dataset_raw, train_labels, test_dataset, config):
     )
     
     return test_loader
+
+
 # ============================================
-# 통합 데이터 로딩 함수
+# 데이터 로딩 함수
 # ============================================
+
+def load_document_data(config):
+    """
+    문서 분류 대회 데이터 로드
+    
+    데이터 구조:
+    - train.csv: ID, target (이미지명 <-> 클래스 인덱스)
+    - meta.csv: target, class_name (클래스 인덱스 <-> 클래스명)
+    - train/: 학습 이미지 디렉토리
+    
+    Args:
+        config: Config 객체
+        
+    Returns:
+        train_dataset_raw, test_dataset, train_labels, class_names, num_classes
+    """
+    print("="*60)
+    print("📄 Loading Document Classification Data")
+    print("="*60)
+    
+    # 데이터 경로 설정
+    current_file = Path(__file__).resolve()
+    project_root = current_file.parent.parent
+    data_dir = project_root / 'data' / 'document'
+    
+    train_csv_path = data_dir / 'train.csv'
+    meta_csv_path = data_dir / 'meta.csv'
+    train_img_dir = data_dir / 'train'
+    
+    # CSV 파일 존재 확인
+    if not train_csv_path.exists():
+        raise FileNotFoundError(
+            f"❌ train.csv not found at {train_csv_path}\n"
+            f"Please download competition data and place it in {data_dir}"
+        )
+    
+    if not meta_csv_path.exists():
+        raise FileNotFoundError(
+            f"❌ meta.csv not found at {meta_csv_path}\n"
+            f"Please download competition data and place it in {data_dir}"
+        )
+    
+    # CSV 로드
+    train_df = pd.read_csv(train_csv_path)
+    meta_df = pd.read_csv(meta_csv_path)
+    
+    # 클래스 정보 추출
+    meta_df = meta_df.sort_values('target').reset_index(drop=True)
+    class_names = meta_df['class_name'].tolist()
+    num_classes = len(class_names)
+    
+    print(f"\n✅ Document Data Loaded!")
+    print(f"Total samples: {len(train_df):,}")
+    print(f"Number of classes: {num_classes}")
+    print(f"Class names: {class_names[:5]}{'...' if num_classes > 5 else ''}")
+    
+    # Dataset 생성
+    train_dataset_raw = DocumentDataset(
+        df=train_df,
+        img_dir=train_img_dir,
+        transform=None
+    )
+    train_labels = train_df['target'].tolist()
+    
+    # Test 데이터는 나중에 제공되면 추가
+    test_dataset = None
+    
+    return train_dataset_raw, test_dataset, train_labels, class_names, num_classes
+
 
 def load_data(config):
     """
@@ -415,26 +348,10 @@ def load_data(config):
     """
     print(f"\n🎯 Dataset Type: {config.DATASET_TYPE}")
     
-    if config.DATASET_TYPE == 'cifar10':
-        return load_cifar10(config)
-    elif config.DATASET_TYPE == 'cifar100':
-        return load_cifar100(config)  # 나중에 필요하면 구현
-    elif config.DATASET_TYPE == 'document':
+    if config.DATASET_TYPE == 'document':
         return load_document_data(config)
     else:
         raise ValueError(
             f"Unknown dataset type: {config.DATASET_TYPE}\n"
-            f"Available types: 'cifar10', 'document'"
+            f"Available types: 'document'"
         )
-
-
-def load_document_data(config):
-    """문서 분류 대회 데이터 로드 (TODO: 대회 시작하면 구현)"""
-    raise NotImplementedError(
-        "📝 Document dataset loader not implemented yet.\n"
-        "Implement this function when competition data is available.\n"
-    )
-def load_cifar100(config):
-    """CIFAR-100 로더 (필요시 구현)"""
-    raise NotImplementedError("CIFAR-100 loader not implemented yet.")
-    

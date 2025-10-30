@@ -5,10 +5,10 @@ import torch
 class Config:
     def __init__(self):
         # 데이터셋 설정
-        self.DATASET_TYPE = 'cifar10'
+        self.DATASET_TYPE = 'document'
         self.IMAGE_SIZE = 224
         self.BATCH_SIZE = 32
-        self.USE_SUBSET = True
+        self.USE_SUBSET = False
         self.SUBSET_RATIO = 0.1
         
         # Augmentation 설정
@@ -20,12 +20,12 @@ class Config:
         self.NUM_CLASSES = 10
         
         # 학습 설정
-        self.EPOCHS = 1
+        self.EPOCHS = 100
         self.LR = 0.001
         self.PATIENCE = 5
         
         # K-Fold 설정
-        self.N_FOLDS = 2
+        self.N_FOLDS = 5
         
         # 기타
         self.DEVICE = torch.device(
@@ -33,11 +33,10 @@ class Config:
             else 'cuda' if torch.cuda.is_available() 
             else 'cpu'
         )
-        self.NUM_CLASSES = 10
 
         # Wandb
         self.USE_WANDB = False
-        self.WANDB_PROJECT = 'cifar10-test'
+        self.WANDB_PROJECT = 'document-classification'
     
     def to_dict(self):
         """Config를 딕셔너리로 변환"""
@@ -94,38 +93,21 @@ class Config:
 
 
 class QuickTestConfig(Config):
-    """빠른 테스트용 설정"""
+    """빠른 테스트용 설정 (Document 데이터로 빠른 검증)"""
     def __init__(self):
         super().__init__()
-        self.DATASET_TYPE = 'cifar10'
-        self.EPOCHS = 1
+        self.DATASET_TYPE = 'document'
+        self.EPOCHS = 2
         self.N_FOLDS = 2
         self.BATCH_SIZE = 64
         self.USE_SUBSET = True
         self.SUBSET_RATIO = 0.1
-        self.AUG_STRATEGY = 'auto'
-        self.NUM_CLASSES = 10
-
-
-
-class CIFAR10Config(Config):
-    """CIFAR-10 전체 학습용"""
-    def __init__(self):
-        super().__init__()
-        self.DATASET_TYPE = 'cifar10'
-        self.IMAGE_SIZE = 32
-        self.BATCH_SIZE = 128
-        self.EPOCHS = 50
-        self.N_FOLDS = 5
-        self.USE_SUBSET = False
-        self.AUG_STRATEGY = 'auto'
-        self.MODEL_NAME = 'resnet18'
-        self.LR = 0.001
-        self.NUM_CLASSES = 10
+        self.AUG_STRATEGY = 'albumentations'  # 빠른 테스트용
+        self.USE_WANDB = False
 
 
 class DocumentConfig(Config):
-    """문서 분류 대회용"""
+    """문서 분류 대회용 (본격 학습)"""
     def __init__(self):
         super().__init__()
         self.DATASET_TYPE = 'document'
@@ -134,20 +116,20 @@ class DocumentConfig(Config):
         self.EPOCHS = 100
         self.N_FOLDS = 5
         self.USE_SUBSET = False
-        self.AUG_STRATEGY = 'auto'
+        self.AUG_STRATEGY = 'hybrid'
         self.AUGRAPHY_STRENGTH = 'medium'
         self.MODEL_NAME = 'efficientnet_b0'
         self.NUM_CLASSES = 10
         self.LR = 0.0001
+        self.PATIENCE = 10
         self.USE_WANDB = True
         self.WANDB_PROJECT = 'document-classification'
-        self.NUM_CLASSES = 10
 
 
 # ==========================================
 # 기본 config 인스턴스
 # ==========================================
-config = QuickTestConfig()
+config = DocumentConfig()
 
 # 전역 변수로 내보내기 (backward compatibility)
 MODEL_NAME = config.MODEL_NAME
@@ -177,7 +159,6 @@ __all__ = [
     # 클래스들
     'Config',
     'QuickTestConfig',
-    'CIFAR10Config',
     'DocumentConfig',
     
     # 인스턴스

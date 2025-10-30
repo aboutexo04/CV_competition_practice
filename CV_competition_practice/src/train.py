@@ -8,7 +8,7 @@ import copy
 from tqdm import tqdm
 from sklearn.metrics import f1_score, classification_report
 from sklearn.model_selection import StratifiedKFold
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 
 class EarlyStopping:
@@ -159,26 +159,25 @@ def validate(model, val_loader, criterion, device):
     return val_loss, val_acc, val_f1, all_preds, all_labels
 
 
-def run_kfold_training(train_dataset_raw, train_labels, num_classes, config, device, use_wandb=False):
+def run_kfold_training(train_dataset_raw, train_labels, config):
     """
     K-Fold Cross Validation 학습 실행 (Config 기반)
     
     Args:
-        train_dataset_raw: 원본 학습 데이터셋
-        train_labels: 학습 데이터 레이블
-        num_classes: 클래스 수
+        train_dataset_raw: Transform이 적용되지 않은 원본 dataset
+        train_labels: Train labels
         config: Config 객체
-        device: 디바이스
-        use_wandb: Wandb 로깅 여부
         
     Returns:
         fold_results: 각 fold별 결과 리스트
     """
-    from torch.utils.data import Subset
     from src.data import get_train_augmentation, get_val_augmentation
     from src.model import get_model, get_optimizer
     
     # Config에서 설정 가져오기
+    device = config.DEVICE
+    num_classes = config.NUM_CLASSES
+    use_wandb = config.USE_WANDB
     n_folds = config.N_FOLDS
     epochs = config.EPOCHS
     batch_size = config.BATCH_SIZE
