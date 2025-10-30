@@ -485,3 +485,27 @@
 
 -----------------------------------------------------
 
+### efficientnet_b0_bs32_ep1
+
+**실행 시간**: 2025-10-30 15:26:27  
+**데이터 모드**: 10% 데이터 (연습용)  
+**모델**: EfficientNet-B0 (efficientnet_b0)  
+
+**하이퍼파라미터**:  
+- Image Size: 224  
+- Epochs: 1  
+- Batch Size: 32  
+- Learning Rate: 0.001  
+- K-Fold: 2 folds  
+
+**Validation Results**:  
+- Fold 1: Val F1 = 0.7712  
+- Fold 2: Val F1 = 0.7622  
+- Average: 0.7667 ± 0.0045  
+
+**Test Results**:  
+- Accuracy: 81.00%  
+- Macro F1: 0.8069  
+
+-----------------------------------------------------
+
