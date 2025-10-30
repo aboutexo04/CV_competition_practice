@@ -9,6 +9,7 @@ from tqdm import tqdm
 from sklearn.metrics import f1_score, classification_report
 from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import DataLoader, Subset
+from src.model import LabelSmoothingLoss
 
 
 class EarlyStopping:
@@ -229,7 +230,18 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         # 모델 생성 (매 fold마다 새로 생성)
         model = get_model(model_name, num_classes, pretrained=True).to(device)
         optimizer = get_optimizer(model, config)
-        criterion = nn.CrossEntropyLoss()
+        # Loss 함수 선택
+        if config.USE_LABEL_SMOOTHING:
+            criterion = LabelSmoothingLoss(
+                num_classes=num_classes,
+                smoothing=config.LABEL_SMOOTHING_FACTOR
+            )
+            if fold == 0:  # 첫 번째 fold에서만 출력
+                print(f"✅ Label Smoothing 사용 (smoothing={config.LABEL_SMOOTHING_FACTOR})")
+        else:
+            criterion = nn.CrossEntropyLoss()
+            if fold == 0:
+                print("✅ CrossEntropyLoss 사용")
         
         # Scheduler & Early Stopping
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(

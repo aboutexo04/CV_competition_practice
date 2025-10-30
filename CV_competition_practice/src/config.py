@@ -12,8 +12,8 @@ class Config:
         self.SUBSET_RATIO = 0.1
         
         # Augmentation 설정
-        self.AUG_STRATEGY = 'auto'
-        self.AUGRAPHY_STRENGTH = 'light'
+        self.AUG_STRATEGY = 'auto' # albumentations | augraphy | hybrid | auto
+        self.AUGRAPHY_STRENGTH = 'light' # light | medium | heavy
         
         # 모델 설정
         self.MODEL_NAME = 'efficientnet_b0'
@@ -37,6 +37,17 @@ class Config:
         # Wandb
         self.USE_WANDB = False
         self.WANDB_PROJECT = 'document-classification'
+
+        self.USE_TTA = False
+        self.TTA_TRANSFORMS = ['original', 'hflip']
+
+        self.USE_LABEL_SMOOTHING = False
+        self.LABEL_SMOOTHING_FACTOR = 0.1
+
+        self.USE_ENSEMBLE = True
+        self.SEED = 42
+        self.DETERMINISTIC = True
+        self.NUM_WORKERS = 0
     
     def to_dict(self):
         """Config를 딕셔너리로 변환"""
@@ -104,6 +115,7 @@ class QuickTestConfig(Config):
         self.SUBSET_RATIO = 0.1
         self.AUG_STRATEGY = 'albumentations'  # 빠른 테스트용
         self.USE_WANDB = False
+        self.USE_TTA = False
 
 
 class DocumentConfig(Config):
@@ -124,7 +136,7 @@ class DocumentConfig(Config):
         self.PATIENCE = 10
         self.USE_WANDB = True
         self.WANDB_PROJECT = 'document-classification'
-
+        self.USE_TTA = False
 
 # ==========================================
 # 기본 config 인스턴스
@@ -143,7 +155,8 @@ USE_SUBSET = config.USE_SUBSET
 SUBSET_RATIO = config.SUBSET_RATIO
 DEVICE = config.DEVICE
 device = config.DEVICE
-
+USE_TTA = config.USE_TTA
+TTA_TRANSFORMS = config.TTA_TRANSFORMS
 # 편의 함수들
 def print_config():
     config.print_config()
@@ -176,7 +189,8 @@ __all__ = [
     'SUBSET_RATIO',
     'DEVICE',
     'device',
-    
+    'USE_TTA',
+    'TTA_TRANSFORMS',
     # 함수들
     'print_config',
     'update_config',

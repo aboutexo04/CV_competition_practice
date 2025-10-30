@@ -196,8 +196,55 @@ def _prepare_image_for_display(image):
         img_np = np.clip(img_np, 0, 1)
     return img_np
 
-
-def evaluate_ensemble(fold_results, test_dataset, config):
+def test_time_augmentation(model, images, device, tta_transforms=None):
+    """
+    Test Time Augmentation 적용
+    
+    Args:
+        model: 예측 모델
+        images: 입력 이미지 배치 (B, C, H, W)
+        device: 디바이스
+        tta_transforms: TTA 변환 리스트 (None이면 기본 변환 사용)
+            예: ['original', 'hflip', 'vflip', 'hflip_vflip', 'rotate90', 'rotate180', 'rotate270']
+    
+    Returns:
+        averaged_probs: 앙상블된 확률 (B, num_classes)
+    """
+    if tta_transforms is None:
+        tta_transforms = ['original', 'hflip']  # 기본: 원본 + 좌우 반전
+    
+    predictions = []
+    
+    for transform in tta_transforms:
+        # 변환 적용
+        if transform == 'original':
+            augmented = images
+        elif transform == 'hflip':
+            augmented = torch.flip(images, dims=[3])  # 좌우 반전
+        elif transform == 'vflip':
+            augmented = torch.flip(images, dims=[2])  # 상하 반전
+        elif transform == 'hflip_vflip':
+            augmented = torch.flip(images, dims=[2, 3])  # 좌우+상하 반전
+        elif transform == 'rotate90':
+            augmented = torch.rot90(images, k=1, dims=[2, 3])
+        elif transform == 'rotate180':
+            augmented = torch.rot90(images, k=2, dims=[2, 3])
+        elif transform == 'rotate270':
+            augmented = torch.rot90(images, k=3, dims=[2, 3])
+        else:
+            continue
+        
+        # 예측
+        with torch.no_grad():
+            outputs = model(augmented.to(device))
+            probs = torch.softmax(outputs, dim=1)
+            predictions.append(probs.cpu())
+    
+    # 앙상블 (평균)
+    averaged_probs = torch.stack(predictions).mean(dim=0)
+    
+    return averaged_probs
+def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_transforms=None):
     """
     K-Fold 모델들의 앙상블 평가 (Config 기반)
     
@@ -230,11 +277,16 @@ def evaluate_ensemble(fold_results, test_dataset, config):
         fold_preds = []
         with torch.no_grad():
             for images, labels in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=False):
-                images = images.to(device)
-                outputs = fold_model(images)
-                probs = torch.softmax(outputs, dim=1)
-                fold_preds.append(probs.cpu().numpy())
-
+                if use_tta:
+                    # TTA 적용 - 텐서 반환
+                    probs = test_time_augmentation(fold_model, images.to(device), device, tta_transforms)
+                    fold_preds.append(probs.numpy())  # 여기서 numpy 변환
+                else:
+                    # 일반 예측
+                    images = images.to(device)
+                    outputs = fold_model(images)
+                    probs = torch.softmax(outputs, dim=1)
+                    fold_preds.append(probs.cpu().numpy())  # 한 번에 변환
         fold_preds = np.concatenate(fold_preds, axis=0)
         all_predictions.append(fold_preds)
 

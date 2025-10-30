@@ -7,6 +7,62 @@ import torch
 import torch.nn as nn
 import timm
 
+# ============================================
+# Loss Functions
+# ============================================
+
+class LabelSmoothingLoss(nn.Module):
+    """
+    Label Smoothing Cross Entropy Loss
+    
+    과적합을 방지하고 일반화 성능을 향상시키는 정규화 기법.
+    정답 클래스에 100% 확신 대신 약간의 불확실성을 부여.
+    
+    Args:
+        num_classes (int): 클래스 개수
+        smoothing (float): 스무딩 정도 (0.0 ~ 1.0)
+            - 0.0: 일반 CrossEntropy와 동일
+            - 0.1: 일반적인 권장값 (ImageNet 논문 기준)
+            - 0.2: 강한 정규화
+    
+    Example:
+        >>> criterion = LabelSmoothingLoss(num_classes=10, smoothing=0.1)
+        >>> outputs = model(images)  # (batch_size, 10)
+        >>> loss = criterion(outputs, labels)
+    """
+    def __init__(self, num_classes, smoothing=0.1):
+        super().__init__()
+        assert 0.0 <= smoothing < 1.0, "smoothing must be in [0.0, 1.0)"
+        
+        self.smoothing = smoothing
+        self.num_classes = num_classes
+        self.confidence = 1.0 - smoothing
+    
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: (batch_size, num_classes) - 모델 출력 (logits)
+            target: (batch_size,) - 정답 레이블 (0 ~ num_classes-1)
+        
+        Returns:
+            loss: scalar tensor
+        """
+        # Log-softmax for numerical stability
+        pred = pred.log_softmax(dim=-1)
+        
+        # Create smoothed labels
+        with torch.no_grad():
+            # 모든 클래스에 균등하게 분배할 확률
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(self.smoothing / (self.num_classes - 1))
+            # 정답 클래스에는 높은 확률 할당
+            true_dist.scatter_(1, target.unsqueeze(1), self.confidence)
+        
+        # KL divergence loss
+        return torch.mean(torch.sum(-true_dist * pred, dim=-1))
+# ============================================
+# Model Configurations
+# ============================================
 # 모델별 설정
 MODEL_CONFIGS = {
     'efficientnet_b0': {'display_name': 'EfficientNet-B0', 'short_name': 'effnet-b0'},
