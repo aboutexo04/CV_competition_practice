@@ -65,7 +65,7 @@ class Config:
         self.EPOCHS = 100
         self.LR = 0.001
         self.PATIENCE = 5
-        self.EARLY_STOPPING_DELTA = 0.001  # Early stopping minimum improvement threshold
+        self.EARLY_STOPPING_DELTA = 0  # Early stopping delta (0 = accept any improvement)
 
         # K-Fold 설정
         self.N_FOLDS = 5
