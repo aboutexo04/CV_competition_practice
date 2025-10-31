@@ -335,5 +335,37 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
             "cv/avg_val_f1": avg_f1,
             "cv/std_val_f1": std_f1
         })
-    
+
+    # ============================================
+    # Save Best Fold Model (if enabled)
+    # ============================================
+    save_model = getattr(config, 'SAVE_MODEL', False)
+
+    if save_model:
+        # Find best fold
+        best_fold_idx = np.argmax([r['best_val_f1'] for r in fold_results])
+        best_fold = fold_results[best_fold_idx]
+        best_f1 = best_fold['best_val_f1']
+
+        print("\n" + "=" * 70)
+        print("💾 Saving Best Model")
+        print("=" * 70)
+        print(f"Best Fold: {best_fold['fold']} (Val F1: {best_f1:.4f})")
+
+        # Create models directory
+        from pathlib import Path
+        models_dir = Path(getattr(config, 'MODELS_DIR', 'models'))
+        models_dir.mkdir(exist_ok=True)
+
+        # Save model with descriptive filename
+        model_filename = f"{model_name}_best_f1_{best_f1:.4f}.pth"
+        model_path = models_dir / model_filename
+
+        torch.save(best_fold['best_model_state'], model_path)
+
+        print(f"✅ Model saved: {model_path}")
+        print("=" * 70)
+    else:
+        print("\n⏭️  Model saving disabled (SAVE_MODEL=False)")
+
     return fold_results

@@ -48,6 +48,10 @@ class Config:
         self.SEED = 42
         self.DETERMINISTIC = True
         self.NUM_WORKERS = 0
+
+        # Model saving
+        self.SAVE_MODEL = True
+        self.MODELS_DIR = 'models'
     
     def to_dict(self):
         """Config를 딕셔너리로 변환"""
@@ -116,6 +120,7 @@ class QuickTestConfig(Config):
         self.AUG_STRATEGY = 'albumentations'  # 빠른 테스트용
         self.USE_WANDB = False
         self.USE_TTA = False
+        self.SAVE_MODEL = False  # Quick test는 모델 저장 안함
 
 
 class DocumentConfig(Config):
@@ -134,9 +139,10 @@ class DocumentConfig(Config):
         self.NUM_CLASSES = 10
         self.LR = 0.0001
         self.PATIENCE = 10
-        self.USE_WANDB = True
+        self.USE_WANDB = False
         self.WANDB_PROJECT = 'document-classification'
         self.USE_TTA = False
+        self.SAVE_MODEL = True  # 본격 학습은 best model 저장
 
 # ==========================================
 # 기본 config 인스턴스
