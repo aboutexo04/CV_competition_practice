@@ -1,4 +1,4 @@
-albucore==0.0.24
+calbucore==0.0.24
 albumentations==2.0.8
 annotated-types==0.7.0
 anyio==4.11.0

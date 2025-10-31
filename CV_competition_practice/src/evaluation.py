@@ -297,32 +297,57 @@ def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_tran
 
     # 실제 레이블
     test_labels = [label for _, label in test_dataset]
-
-    # ✅ 레이블이 -1이면 실제 테스트 데이터 (평가 불가)
-    has_true_labels = not all(label == -1 for label in test_labels)
+    
+    # 레이블 확인: 모든 레이블이 -1이 아니고 유효한 범위 내에 있는지 체크
+    has_true_labels = False
+    if test_labels and len(test_labels) > 0:
+        # -1이 아닌 유효한 레이블이 하나라도 있으면 실제 레이블이 있다고 판단
+        valid_labels = [label for label in test_labels if label != -1 and label >= 0]
+        has_true_labels = len(valid_labels) > 0
 
     if has_true_labels:
-        # 평가 지표 계산
-        test_f1 = f1_score(test_labels, ensemble_preds, average='macro')
-        test_acc = 100. * np.sum(np.array(ensemble_preds) == np.array(test_labels)) / len(test_labels)
+        # 평가 지표 계산 (유효한 레이블만 사용)
+        valid_indices = [i for i, label in enumerate(test_labels) if label != -1 and label >= 0]
+        valid_test_labels = [test_labels[i] for i in valid_indices]
+        valid_ensemble_preds = [ensemble_preds[i] for i in valid_indices]
+        
+        test_f1 = f1_score(valid_test_labels, valid_ensemble_preds, average='macro')
+        test_acc = 100. * np.sum(np.array(valid_ensemble_preds) == np.array(valid_test_labels)) / len(valid_test_labels)
 
         print("\n" + "=" * 70)
         print("🎯 Test Set 최종 결과 (앙상블)")
         print("=" * 70)
         print(f"Test Accuracy: {test_acc:.2f}%")
         print(f"Test Macro F1 Score: {test_f1:.4f}")
+        print(f"✅ 실제 테스트 레이블로 계산된 정확한 F1 스코어입니다.")
         print("=" * 70)
     else:
         # 실제 테스트 데이터 - 레이블 없음
-        test_f1 = 0.0
+        # Validation F1 평균을 사용 (제출 파일명에 사용)
+        if fold_results and len(fold_results) > 0:
+            avg_val_f1 = np.mean([r['best_val_f1'] for r in fold_results if 'best_val_f1' in r])
+            test_f1 = avg_val_f1
+            print("\n" + "=" * 70)
+            print("🎯 Test Set 최종 결과 (앙상블)")
+            print("=" * 70)
+            print("⚠️  실제 테스트 데이터는 레이블이 없어 평가할 수 없습니다.")
+            print(f"✅ 예측 완료: {len(ensemble_preds):,}개 샘플")
+            print(f"📊 제출 파일명에 사용할 F1 스코어 (평균 Validation F1): {test_f1:.4f}")
+            print("📝 제출 파일을 생성하여 대회에 제출하세요.")
+            print("=" * 70)
+        else:
+            # Fallback: fold_results가 없거나 비어있는 경우
+            test_f1 = 0.0
+            print("\n" + "=" * 70)
+            print("🎯 Test Set 최종 결과 (앙상블)")
+            print("=" * 70)
+            print("⚠️  실제 테스트 데이터는 레이블이 없고, Validation F1도 계산할 수 없습니다.")
+            print(f"✅ 예측 완료: {len(ensemble_preds):,}개 샘플")
+            print(f"❌ F1 스코어를 계산할 수 없습니다. (기본값: 0.0000)")
+            print("📝 제출 파일을 생성하여 대회에 제출하세요.")
+            print("=" * 70)
+        
         test_acc = 0.0
-        print("\n" + "=" * 70)
-        print("🎯 Test Set 최종 결과 (앙상블)")
-        print("=" * 70)
-        print("⚠️  실제 테스트 데이터는 레이블이 없어 평가할 수 없습니다.")
-        print(f"✅ 예측 완료: {len(ensemble_preds):,}개 샘플")
-        print("📝 제출 파일을 생성하여 대회에 제출하세요.")
-        print("=" * 70)
 
     return test_acc, test_f1, ensemble_preds, test_labels
 
