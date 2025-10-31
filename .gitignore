@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data files (large files - should not be in git)
+data/
+data.tar.gz
+*.csv
+*.parquet
+*.pkl
+*.pickle
+
+# Model files (too large for git)
+models/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+checkpoints/
+
+# Cache files
+augraphy_cache/
+CV_competition_practice/augraphy_cache/
+
+# Weights & Biases
+wandb/
+
+# Logs
+logs/
+*.log
+
+# Outputs
+outputs/
+
+# Environment variables
+.env
+.env.local
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
