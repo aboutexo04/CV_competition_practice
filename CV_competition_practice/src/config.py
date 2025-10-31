@@ -1,9 +1,47 @@
 # src/config.py
 
 import torch
+from pathlib import Path
 
 class Config:
     def __init__(self):
+        # 데이터 경로 자동 감지 (실행 위치에 따라 조정)
+        self._setup_data_paths()
+
+        # 나머지 설정 초기화
+        self._setup_default_config()
+
+    def _setup_data_paths(self):
+        """실행 위치에 따라 데이터 경로를 자동으로 설정"""
+        current_dir = Path.cwd()
+
+        # 가능한 데이터 경로들
+        possible_paths = [
+            current_dir / 'data',                    # 프로젝트 루트에서 실행
+            current_dir / '../data',                 # CV_competition_practice 폴더에서 실행
+            current_dir / '../../data',              # src 폴더에서 실행
+        ]
+
+        # 존재하는 경로 찾기
+        data_dir = None
+        for path in possible_paths:
+            if path.exists() and (path / 'train.csv').exists():
+                data_dir = path
+                break
+
+        if data_dir is None:
+            # 기본값 설정 (에러 메시지를 위해)
+            data_dir = current_dir / 'data'
+
+        # 경로 설정
+        self.DATA_DIR = str(data_dir)
+        self.TRAIN_CSV = str(data_dir / 'train.csv')
+        self.TEST_DIR = str(data_dir / 'test')
+        self.META_CSV = str(data_dir / 'meta.csv')
+        self.SUBMISSION_PATH = str(data_dir / 'sample_submission.csv')
+
+    def _setup_default_config(self):
+        """기본 설정 초기화"""
         # 데이터셋 설정
         self.DATASET_TYPE = 'document'
         self.IMAGE_SIZE = 224
@@ -17,7 +55,7 @@ class Config:
         
         # 모델 설정
         self.MODEL_NAME = 'efficientnet_b0'
-        self.NUM_CLASSES = 10
+        self.NUM_CLASSES = 17  # meta.csv에 0~16까지 17개 클래스
         
         # 학습 설정
         self.EPOCHS = 100
@@ -112,15 +150,17 @@ class QuickTestConfig(Config):
     def __init__(self):
         super().__init__()
         self.DATASET_TYPE = 'document'
-        self.EPOCHS = 2
-        self.N_FOLDS = 2
-        self.BATCH_SIZE = 64
-        self.USE_SUBSET = True
+        self.EPOCHS = 20
+        self.N_FOLDS = 5
+        self.BATCH_SIZE = 32
+        self.USE_SUBSET = False
         self.SUBSET_RATIO = 0.1
         self.AUG_STRATEGY = 'albumentations'  # 빠른 테스트용
         self.USE_WANDB = False
         self.USE_TTA = False
         self.SAVE_MODEL = False  # Quick test는 모델 저장 안함
+        self.IMAGE_SIZE = 224
+        self.LR = 0.0001
 
 
 class DocumentConfig(Config):
@@ -130,18 +170,18 @@ class DocumentConfig(Config):
         self.DATASET_TYPE = 'document'
         self.IMAGE_SIZE = 224
         self.BATCH_SIZE = 32
-        self.EPOCHS = 100
+        self.EPOCHS = 20
         self.N_FOLDS = 5
         self.USE_SUBSET = False
         self.AUG_STRATEGY = 'hybrid'
         self.AUGRAPHY_STRENGTH = 'medium'
-        self.MODEL_NAME = 'efficientnet_b0'
-        self.NUM_CLASSES = 10
-        self.LR = 0.0001
+        self.MODEL_NAME = 'tf_efficientnetv2_s'
+        self.NUM_CLASSES = 17  # meta.csv에 0~16까지 17개 클래스
+        self.LR = 0.001
         self.PATIENCE = 10
         self.USE_WANDB = False
         self.WANDB_PROJECT = 'document-classification'
-        self.USE_TTA = False
+        self.USE_TTA = True
         self.SAVE_MODEL = True  # 본격 학습은 best model 저장
 
 # ==========================================

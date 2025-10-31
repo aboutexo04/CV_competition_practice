@@ -73,6 +73,31 @@ class TransformSubset(torch.utils.data.Dataset):
         return img, label
 
 
+def safe_collate_fn(batch):
+    """채널 수 안전 장치"""
+    import torch
+    
+    images = []
+    labels = []
+    
+    for image, label in batch:
+        # 채널 확인
+        if image.ndim == 2:  # (H, W)
+            image = image.unsqueeze(0).repeat(3, 1, 1)
+        elif image.shape[0] == 1:  # (1, H, W)
+            image = image.repeat(3, 1, 1)
+        elif image.shape[0] == 4:  # (4, H, W) - RGBA
+            image = image[:3, :, :]
+        
+        images.append(image)
+        labels.append(label)
+    
+    images = torch.stack(images, dim=0)
+    labels = torch.tensor(labels, dtype=torch.long)
+    
+    return images, labels
+
+
 def train_one_epoch(model, train_loader, criterion, optimizer, device):
     """
     한 에폭 동안 모델 학습
@@ -190,8 +215,8 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
     print(f"Model: {model_name}, Epochs: {epochs}, Batch: {batch_size}, Folds: {n_folds}")
     print("=" * 70)
     
-    # Augmentation
-    train_transform = get_train_augmentation(config)
+    # ✅ Augmentation 수정!
+    train_transform = get_train_augmentation(config.IMAGE_SIZE, config)
     val_transform = get_val_augmentation(config.IMAGE_SIZE)
     
     # K-Fold 설정
@@ -215,14 +240,16 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=0
+            num_workers=0,
+            collate_fn=safe_collate_fn
         )
         
         val_loader = DataLoader(
             val_dataset,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=0
+            num_workers=0,
+            collate_fn=safe_collate_fn
         )
         
         print(f"Train: {len(train_dataset):,}, Val: {len(val_dataset):,}")
@@ -230,6 +257,7 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         # 모델 생성 (매 fold마다 새로 생성)
         model = get_model(model_name, num_classes, pretrained=True).to(device)
         optimizer = get_optimizer(model, config)
+        
         # Loss 함수 선택
         if config.USE_LABEL_SMOOTHING:
             criterion = LabelSmoothingLoss(

@@ -69,6 +69,8 @@ MODEL_CONFIGS = {
     'efficientnet_b1': {'display_name': 'EfficientNet-B1', 'short_name': 'effnet-b1'},
     'efficientnet_b2': {'display_name': 'EfficientNet-B2', 'short_name': 'effnet-b2'},
     'efficientnet_b3': {'display_name': 'EfficientNet-B3', 'short_name': 'effnet-b3'},
+    'tf_efficientnetv2_s': {'display_name': 'EfficientNetV2-S', 'short_name': 'effnetv2-s'},
+    'tf_efficientnetv2_m': {'display_name': 'EfficientNetV2-M', 'short_name': 'effnetv2-m'},
     'resnet18': {'display_name': 'ResNet-18', 'short_name': 'resnet18'},
     'resnet34': {'display_name': 'ResNet-34', 'short_name': 'resnet34'},
     'resnet50': {'display_name': 'ResNet-50', 'short_name': 'resnet50'},

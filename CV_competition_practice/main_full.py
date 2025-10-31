@@ -19,6 +19,12 @@ Usage:
 
     # Quick test mode
     python main_full.py --use_subset=True --subset_ratio=0.1 --epochs=5 --n_folds=2
+
+    # Create submission with TTA
+    python main_full.py --use_tta=True --create_submission=True
+
+    # Disable submission creation
+    python main_full.py --create_submission=False
 """
 
 import sys
@@ -41,9 +47,11 @@ if str(project_root) not in sys.path:
 from src.config import DocumentConfig
 from src.data import load_data
 from src.train import run_kfold_training
-from src.evaluation import run_full_evaluation
+from src.evaluation import run_full_evaluation, evaluate_ensemble
 from src.logger import log_experiment_results
+from src.submission import save_submission
 from src.utils import set_seed
+import pickle
 
 
 def train(
@@ -62,7 +70,7 @@ def train(
     augraphy_strength='light',
 
     # Training settings
-    epochs=100,
+    epochs=20,
     lr=0.0001,
     patience=10,
     n_folds=5,
@@ -71,6 +79,10 @@ def train(
     use_label_smoothing=False,
     label_smoothing_factor=0.1,
     use_tta=False,
+
+    # Submission settings
+    create_submission=True,
+    save_fold_results=True,
 
     # Wandb settings
     use_wandb=False,
@@ -99,6 +111,8 @@ def train(
         use_label_smoothing: Use label smoothing loss
         label_smoothing_factor: Label smoothing factor (0.0-1.0)
         use_tta: Use Test Time Augmentation
+        create_submission: Create submission file after training
+        save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
         wandb_project: Wandb project name
         seed: Random seed
@@ -253,7 +267,62 @@ def train(
         print("\nWandb finished")
 
     # ============================================
-    # 8. Summary
+    # 8. Save Fold Results (optional)
+    # ============================================
+    if save_fold_results:
+        print("\n" + "="*70)
+        print("Saving Fold Results")
+        print("="*70)
+
+        results_dir = Path('results')
+        results_dir.mkdir(exist_ok=True)
+
+        fold_results_path = results_dir / 'fold_results.pkl'
+        with open(fold_results_path, 'wb') as f:
+            pickle.dump(fold_results, f)
+
+        print(f"✅ Fold results saved: {fold_results_path}")
+
+    # ============================================
+    # 9. Create Submission File (optional)
+    # ============================================
+    if create_submission and test_dataset is not None:
+        print("\n" + "="*70)
+        print("Creating Submission File")
+        print("="*70)
+
+        submission_dir = Path('submissions')
+        submission_dir.mkdir(exist_ok=True)
+
+        # Create submissions (standard and optionally TTA)
+        tta_list = [False, True] if use_tta else [False]
+
+        for use_tta_flag in tta_list:
+            tta_label = "with TTA" if use_tta_flag else "standard"
+            print(f"\n{'🔄' if use_tta_flag else '📝'} Creating {tta_label} submission...")
+
+            _, test_f1, predictions, _ = evaluate_ensemble(
+                fold_results=fold_results,
+                test_dataset=test_dataset,
+                config=config,
+                use_tta=use_tta_flag,
+                tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original']
+            )
+
+            try:
+                save_submission(
+                    preds=predictions,
+                    sample_path=config.SUBMISSION_PATH,
+                    save_path=submission_dir,
+                    f1_score=test_f1
+                )
+            except Exception as e:
+                print(f"❌ Error: {e}")
+                if not use_tta_flag:  # Stop if standard submission fails
+                    return
+
+    # ============================================
+    # 10. Summary
     # ============================================
     print("\n" + "="*70)
     print("Training Complete!")

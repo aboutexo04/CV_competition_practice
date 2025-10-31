@@ -10,7 +10,7 @@ import numpy as np
 import seaborn as sns
 import torch
 from sklearn.metrics import f1_score, confusion_matrix
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 # 한글 폰트 설정
@@ -276,19 +276,20 @@ def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_tran
 
         fold_preds = []
         with torch.no_grad():
-            for images, labels in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=False):
+            for images, labels in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=True):
                 if use_tta:
                     # TTA 적용 - 텐서 반환
-                    probs = test_time_augmentation(fold_model, images.to(device), device, tta_transforms)
-                    fold_preds.append(probs.numpy())  # 여기서 numpy 변환
+                    probs = test_time_augmentation(fold_model, images, device, tta_transforms)
+                    fold_preds.append(probs.cpu().numpy())  # ✅ .cpu() 추가
                 else:
                     # 일반 예측
                     images = images.to(device)
                     outputs = fold_model(images)
                     probs = torch.softmax(outputs, dim=1)
-                    fold_preds.append(probs.cpu().numpy())  # 한 번에 변환
+                    fold_preds.append(probs.cpu().numpy())
         fold_preds = np.concatenate(fold_preds, axis=0)
         all_predictions.append(fold_preds)
+        print(f"✅ Fold {fold_idx + 1} 예측 완료! (predictions shape: {fold_preds.shape})")  # ✅ shape 정보 추가
 
     # 앙상블 (평균)
     ensemble_probs = np.mean(all_predictions, axis=0)
@@ -297,16 +298,31 @@ def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_tran
     # 실제 레이블
     test_labels = [label for _, label in test_dataset]
 
-    # 평가 지표 계산
-    test_f1 = f1_score(test_labels, ensemble_preds, average='macro')
-    test_acc = 100. * np.sum(np.array(ensemble_preds) == np.array(test_labels)) / len(test_labels)
+    # ✅ 레이블이 -1이면 실제 테스트 데이터 (평가 불가)
+    has_true_labels = not all(label == -1 for label in test_labels)
 
-    print("\n" + "=" * 70)
-    print("🎯 Test Set 최종 결과 (앙상블)")
-    print("=" * 70)
-    print(f"Test Accuracy: {test_acc:.2f}%")
-    print(f"Test Macro F1 Score: {test_f1:.4f}")
-    print("=" * 70)
+    if has_true_labels:
+        # 평가 지표 계산
+        test_f1 = f1_score(test_labels, ensemble_preds, average='macro')
+        test_acc = 100. * np.sum(np.array(ensemble_preds) == np.array(test_labels)) / len(test_labels)
+
+        print("\n" + "=" * 70)
+        print("🎯 Test Set 최종 결과 (앙상블)")
+        print("=" * 70)
+        print(f"Test Accuracy: {test_acc:.2f}%")
+        print(f"Test Macro F1 Score: {test_f1:.4f}")
+        print("=" * 70)
+    else:
+        # 실제 테스트 데이터 - 레이블 없음
+        test_f1 = 0.0
+        test_acc = 0.0
+        print("\n" + "=" * 70)
+        print("🎯 Test Set 최종 결과 (앙상블)")
+        print("=" * 70)
+        print("⚠️  실제 테스트 데이터는 레이블이 없어 평가할 수 없습니다.")
+        print(f"✅ 예측 완료: {len(ensemble_preds):,}개 샘플")
+        print("📝 제출 파일을 생성하여 대회에 제출하세요.")
+        print("=" * 70)
 
     return test_acc, test_f1, ensemble_preds, test_labels
 
@@ -544,73 +560,156 @@ def analyze_misclassifications(test_dataset_raw, test_labels, predictions, class
     print("✅ 클래스별 오분류 비율 시각화 완료!")
 
 
-def run_full_evaluation(fold_results, test_dataset, class_names, config):
+def run_full_evaluation(fold_results, test_dataset, class_names, config, train_dataset_raw=None, train_labels=None):
     """
     전체 평가 프로세스를 한 번에 실행 (Config 기반)
-    
+
     Args:
         fold_results: K-Fold 학습 결과
         test_dataset: 테스트 데이터셋
         class_names: 클래스 이름 리스트
         config: Config 객체
-        
+        train_dataset_raw: 학습 데이터셋 (optional)
+        train_labels: 학습 레이블 (optional)
+
     Returns:
         results: 평가 결과 딕셔너리
     """
+    from src.data import load_data, get_val_augmentation
+    from src.train import TransformSubset
+    from src.model import get_model
+    from sklearn.model_selection import StratifiedKFold
+
     device = config.DEVICE
     use_wandb = config.USE_WANDB
-    
+
     print("=" * 70)
     print("🚀 전체 평가 프로세스 시작")
     print("=" * 70)
 
-    # 1. 앙상블 평가
-    test_acc, test_f1, ensemble_preds, test_labels = evaluate_ensemble(
-        fold_results=fold_results,
-        test_dataset=test_dataset,
-        config=config
+    # 1. 학습 곡선 시각화
+    print("\n📈 학습 곡선 시각화...")
+    plot_training_curves(fold_results)
+
+    # 2. Validation 데이터로 앙상블 평가
+    print("\n🔮 Validation 앙상블 예측 시작...")
+
+    # train_dataset_raw와 train_labels 가져오기
+    if train_dataset_raw is None or train_labels is None:
+        print("⚠️  train_dataset_raw 또는 train_labels가 없어 데이터를 다시 로드합니다...")
+        train_dataset_raw, _, train_labels, _, _ = load_data(config)
+
+    val_transform = get_val_augmentation(config.IMAGE_SIZE)
+    kfold = StratifiedKFold(n_splits=config.N_FOLDS, shuffle=True, random_state=42)
+
+    all_val_preds = []
+    all_val_labels = []
+
+    for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(train_dataset_raw, train_labels)):
+        print(f"\n📁 Fold {fold_idx + 1} Validation 예측...")
+
+        # Validation 데이터셋
+        val_subset = Subset(train_dataset_raw, val_idx)
+        val_dataset = TransformSubset(val_subset, val_transform)
+        val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
+
+        # 모델 로드
+        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False)
+        fold_model.load_state_dict(fold_results[fold_idx]['best_model_state'])
+        fold_model = fold_model.to(device)
+        fold_model.eval()
+
+        # 예측
+        fold_preds = []
+        fold_labels = []
+        with torch.no_grad():
+            for images, labels in tqdm(val_loader, desc=f"Fold {fold_idx + 1}", leave=True):
+                images = images.to(device)
+                outputs = fold_model(images)
+                probs = torch.softmax(outputs, dim=1)
+                preds = torch.argmax(probs, dim=1)
+
+                fold_preds.extend(preds.cpu().numpy())
+                fold_labels.extend(labels.numpy())
+
+        all_val_preds.extend(fold_preds)
+        all_val_labels.extend(fold_labels)
+        print(f"✅ Fold {fold_idx + 1} Validation 예측 완료!")
+
+    # Validation 성능 계산
+    val_f1 = f1_score(all_val_labels, all_val_preds, average='macro')
+    val_acc = 100. * np.sum(np.array(all_val_preds) == np.array(all_val_labels)) / len(all_val_labels)
+
+    print("\n" + "=" * 70)
+    print("🎯 Validation Set 앙상블 결과")
+    print("=" * 70)
+    print(f"Validation Accuracy: {val_acc:.2f}%")
+    print(f"Validation Macro F1 Score: {val_f1:.4f}")
+    print("=" * 70)
+
+    # 3. Confusion Matrix
+    print("\n📊 Confusion Matrix 생성...")
+    plot_confusion_matrix(all_val_labels, all_val_preds, class_names)
+
+    # 4. 오분류 분석
+    print("\n🔍 오분류 분석...")
+    analyze_misclassifications(
+        test_dataset_raw=train_dataset_raw,
+        test_labels=all_val_labels,
+        predictions=all_val_preds,
+        class_names=class_names,
+        fallback_dataset=None
     )
+
+    # 5. Test 데이터 예측 (제출용)
+    print("\n" + "=" * 70)
+    print("🔮 Test 데이터 예측 (제출용)")
+    print("=" * 70)
+
+    test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
+    all_test_preds = []
+
+    for fold_idx, fold_result in enumerate(fold_results):
+        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False)
+        fold_model.load_state_dict(fold_result['best_model_state'])
+        fold_model = fold_model.to(device)
+        fold_model.eval()
+
+        fold_preds = []
+        with torch.no_grad():
+            for images, _ in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=True):
+                images = images.to(device)
+                outputs = fold_model(images)
+                probs = torch.softmax(outputs, dim=1)
+                fold_preds.append(probs.cpu().numpy())
+
+        fold_preds = np.concatenate(fold_preds, axis=0)
+        all_test_preds.append(fold_preds)
+        print(f"✅ Fold {fold_idx + 1} Test 예측 완료!")
+
+    # 앙상블 (평균)
+    ensemble_probs = np.mean(all_test_preds, axis=0)
+    ensemble_preds = np.argmax(ensemble_probs, axis=1)
+
+    print("\n" + "=" * 70)
+    print(f"✅ Test 예측 완료: {len(ensemble_preds):,}개 샘플")
+    print("=" * 70)
 
     # Wandb 로깅
     if use_wandb:
         import wandb
         wandb.log({
-            "ensemble/test_accuracy": test_acc,
-            "ensemble/test_f1_macro": test_f1
+            "ensemble/val_accuracy": val_acc,
+            "ensemble/val_f1_macro": val_f1
         })
-
-    # 2. 학습 곡선 시각화
-    print("\n📈 학습 곡선 시각화...")
-    plot_training_curves(fold_results)
-
-    # 3. Confusion Matrix
-    print("\n📊 Confusion Matrix 생성...")
-    plot_confusion_matrix(test_labels, ensemble_preds, class_names)
-
-    # 4. 오분류 분석
-    print("\n🔍 오분류 분석...")
-    
-    # test_dataset_raw 가져오기
-    from src.data import load_data
-    _, test_dataset_raw, _, _, _ = load_data(config)
-    if hasattr(test_dataset_raw, 'transform'):
-        test_dataset_raw.transform = None  # transform 제거
-    
-    analyze_misclassifications(
-        test_dataset_raw=test_dataset_raw,
-        test_labels=test_labels,
-        predictions=ensemble_preds,
-        class_names=class_names,
-        fallback_dataset=test_dataset
-    )
 
     print("\n" + "=" * 70)
     print("✅ 전체 평가 완료!")
     print("=" * 70)
 
     return {
-        'test_acc': test_acc,
-        'test_f1': test_f1,
-        'predictions': ensemble_preds,
-        'labels': test_labels
+        'test_acc': val_acc,  # Validation 성능
+        'test_f1': val_f1,    # Validation 성능
+        'predictions': ensemble_preds,  # Test 예측값
+        'labels': [-1] * len(ensemble_preds)
     }
