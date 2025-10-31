@@ -72,7 +72,8 @@ def train(
     # Training settings
     epochs=20,
     lr=0.0001,
-    patience=10,
+    patience=5,
+    early_stopping_delta=0.001,
     n_folds=5,
 
     # Advanced settings
@@ -107,6 +108,7 @@ def train(
         epochs: Number of training epochs
         lr: Learning rate
         patience: Early stopping patience
+        early_stopping_delta: Minimum improvement to count as improvement (default: 0.001)
         n_folds: Number of K-Fold splits
         use_label_smoothing: Use label smoothing loss
         label_smoothing_factor: Label smoothing factor (0.0-1.0)
@@ -141,6 +143,7 @@ def train(
         EPOCHS=epochs,
         LR=lr,
         PATIENCE=patience,
+        EARLY_STOPPING_DELTA=early_stopping_delta,
         N_FOLDS=n_folds,
         USE_LABEL_SMOOTHING=use_label_smoothing,
         LABEL_SMOOTHING_FACTOR=label_smoothing_factor,

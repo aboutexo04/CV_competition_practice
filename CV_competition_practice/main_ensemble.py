@@ -41,15 +41,16 @@ from src.utils import set_seed
 from torch.utils.data import DataLoader
 
 
-def load_trained_models(model_names, num_classes, device, models_dir='models'):
+def load_trained_models(model_names, num_classes, device, models_dir='models', load_all_checkpoints=False):
     """
     Load trained models from checkpoint files
 
     Args:
-        model_names: List of model names to load
+        model_names: List of model names to load (or 'all' to load all checkpoints for a single model)
         num_classes: Number of classes
         device: Device to load models on
         models_dir: Directory containing saved model checkpoints
+        load_all_checkpoints: If True, load all checkpoints for each model name
 
     Returns:
         List of loaded models
@@ -57,45 +58,47 @@ def load_trained_models(model_names, num_classes, device, models_dir='models'):
     models = []
     models_path = Path(models_dir)
 
-    print(f"\nLoading {len(model_names)} models...")
+    print(f"\nLoading models...")
 
     for model_name in model_names:
         print(f"\n  Loading {model_name}...")
 
-        # Create model
-        model = get_model(model_name, num_classes=num_classes, pretrained=False)
-
-        # Find checkpoint file
+        # Find checkpoint files
         checkpoint_pattern = f"*{model_name}*.pth"
-        checkpoint_files = list(models_path.glob(checkpoint_pattern))
+        checkpoint_files = sorted(list(models_path.glob(checkpoint_pattern)))
 
         if not checkpoint_files:
             print(f"    Warning: No checkpoint found for {model_name}")
-            print(f"    Creating model with random weights (for testing)")
+            continue
+
+        # Load all checkpoints for this model name if requested
+        if load_all_checkpoints:
+            print(f"    Found {len(checkpoint_files)} checkpoints, loading all...")
+            checkpoint_files_to_load = checkpoint_files
+        else:
+            checkpoint_files_to_load = [checkpoint_files[0]]
+            if len(checkpoint_files) > 1:
+                print(f"    Found {len(checkpoint_files)} checkpoints, using {checkpoint_files[0].name}")
+
+        # Load each checkpoint
+        for checkpoint_file in checkpoint_files_to_load:
+            # Create model
+            model = get_model(model_name, num_classes=num_classes, pretrained=False)
+
+            # Load state dict
+            try:
+                state_dict = torch.load(checkpoint_file, map_location=device)
+                model.load_state_dict(state_dict)
+                print(f"    ✅ Loaded: {checkpoint_file.name}")
+            except Exception as e:
+                print(f"    ❌ Error loading {checkpoint_file.name}: {e}")
+                continue
+
             model = model.to(device)
             model.eval()
             models.append(model)
-            continue
 
-        # Load best checkpoint (if multiple exist)
-        checkpoint_file = checkpoint_files[0]
-        if len(checkpoint_files) > 1:
-            print(f"    Found {len(checkpoint_files)} checkpoints, using {checkpoint_file.name}")
-
-        # Load state dict
-        try:
-            state_dict = torch.load(checkpoint_file, map_location=device)
-            model.load_state_dict(state_dict)
-            print(f"    Loaded checkpoint: {checkpoint_file.name}")
-        except Exception as e:
-            print(f"    Error loading checkpoint: {e}")
-            print(f"    Using model with random weights")
-
-        model = model.to(device)
-        model.eval()
-        models.append(model)
-
-    print(f"\nSuccessfully loaded {len(models)} models")
+    print(f"\n✅ Successfully loaded {len(models)} models")
     return models
 
 
@@ -181,18 +184,22 @@ def run_ensemble(
     image_size=224,
     seed=42,
     output_file='submission_ensemble.csv',
+    load_all_checkpoints=False,
 ):
     """
     Run ensemble prediction on test data
 
     Args:
         models: Comma-separated model names (e.g., 'efficientnet_b0,resnet50')
+                If only one model name is given and load_all_checkpoints=True,
+                all checkpoints for that model will be loaded
         weights: Comma-separated weights for models (e.g., '0.6,0.4')
         ensemble_method: Ensemble method ('average' or 'voting')
         batch_size: Batch size for inference
         image_size: Image size
         seed: Random seed
         output_file: Output submission file name
+        load_all_checkpoints: If True, load all checkpoints for each model name
     """
 
     # ============================================
@@ -215,10 +222,16 @@ def run_ensemble(
         print(f"  {i}. {name}")
 
     # Parse weights
-    if weights is not None:
-        weights = [float(w.strip()) for w in weights.split(',')]
-        if len(weights) != len(model_names):
-            raise ValueError(f"Number of weights ({len(weights)}) must match number of models ({len(model_names)})")
+    if weights is not None and weights.strip():
+        weights_list = [w.strip() for w in weights.split(',')]
+        weights_list = [w for w in weights_list if w]  # 빈 문자열 제거
+        if weights_list:
+            weights = [float(w) for w in weights_list]
+            if len(weights) != len(model_names):
+                raise ValueError(f"Number of weights ({len(weights)}) must match number of models ({len(model_names)})")
+        else:
+            weights = None
+            print(f"\nUsing equal weights for all models")
     else:
         weights = None
         print(f"\nUsing equal weights for all models")
@@ -260,7 +273,8 @@ def run_ensemble(
     models_list = load_trained_models(
         model_names=model_names,
         num_classes=num_classes,
-        device=device
+        device=device,
+        load_all_checkpoints=load_all_checkpoints
     )
 
     # ============================================
@@ -320,15 +334,31 @@ def run_ensemble(
 
     from src.submission import save_submission
 
-    # Create output directory
-    output_dir = Path('outputs')
-    output_dir.mkdir(exist_ok=True)
-    output_path = output_dir / output_file
+    # Create output directory for submissions
+    submission_dir = Path('submissions')
+    submission_dir.mkdir(exist_ok=True)
+
+    # Extract F1 scores from checkpoint filenames for ensemble
+    # If multiple checkpoints, use average F1 score
+    import re
+    f1_scores = []
+    for model_name in model_names:
+        checkpoint_pattern = f"*{model_name}*.pth"
+        checkpoint_files = sorted(list(Path('models').glob(checkpoint_pattern)))
+        for checkpoint_file in checkpoint_files:
+            # Extract F1 score from filename (e.g., "model_best_f1_0.9304.pth")
+            match = re.search(r'f1_([\d.]+)', checkpoint_file.stem, re.IGNORECASE)
+            if match:
+                f1_scores.append(float(match.group(1)))
+    
+    # Use average F1 if available, otherwise 0.0
+    ensemble_f1 = np.mean(f1_scores) if f1_scores else 0.0
 
     save_submission(
         preds=predictions,
-        sample_path='sample_submission.csv',
-        save_path=str(output_path)
+        sample_path=config.SUBMISSION_PATH,
+        save_path=submission_dir,
+        f1_score=ensemble_f1
     )
 
     # ============================================

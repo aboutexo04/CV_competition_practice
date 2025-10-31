@@ -275,7 +275,8 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='max', factor=0.5, patience=2, verbose=True
         )
-        early_stopping = EarlyStopping(patience=patience, verbose=True)
+        early_stopping_delta = getattr(config, 'EARLY_STOPPING_DELTA', 0.001)
+        early_stopping = EarlyStopping(patience=patience, verbose=True, delta=early_stopping_delta)
         
         # 학습 이력
         history = {
