@@ -84,15 +84,16 @@ MODEL_CONFIGS = {
 }
 
 
-def get_model(model_name, num_classes=10, pretrained=True):
+def get_model(model_name, num_classes=10, pretrained=True, dropout_rate=0.0):
     """
     Config 기반으로 모델 생성
-    
+
     Args:
         model_name: 모델 이름 (예: 'efficientnet_b0', 'resnet50')
         num_classes: 출력 클래스 수
         pretrained: ImageNet pretrained weights 사용 여부
-        
+        dropout_rate: Dropout 비율 (0.0 ~ 0.5)
+
     Returns:
         model: PyTorch 모델
     """
@@ -100,22 +101,25 @@ def get_model(model_name, num_classes=10, pretrained=True):
         model = timm.create_model(
             model_name,
             pretrained=pretrained,
-            num_classes=num_classes
+            num_classes=num_classes,
+            drop_rate=dropout_rate  # Dropout 적용
         )
-        
+
         # Display name 가져오기
         model_config = MODEL_CONFIGS.get(
-            model_name, 
+            model_name,
             {'display_name': model_name, 'short_name': model_name}
         )
         display_name = model_config['display_name']
-        
+
         print(f"✅ 모델 생성 완료: {display_name} ({model_name})")
         if pretrained:
             print(f"   Pretrained weights 사용")
-        
+        if dropout_rate > 0:
+            print(f"   🛡️  Dropout rate: {dropout_rate}")
+
         return model
-    
+
     except Exception as e:
         print(f"❌ 모델 생성 실패: {model_name}")
         print(f"   Error: {e}")
@@ -217,20 +221,24 @@ def print_model_info(model, device, model_name=None):
 def get_optimizer(model, config):
     """
     Config 기반으로 optimizer 생성
-    
+
     Args:
         model: PyTorch 모델
         config: Config 객체
-        
+
     Returns:
         optimizer: PyTorch optimizer
     """
+    weight_decay = getattr(config, 'WEIGHT_DECAY', 5e-4)
+
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config.LR,
-        weight_decay=getattr(config, 'WEIGHT_DECAY', 1e-4)
+        weight_decay=weight_decay
     )
-    
+
+    print(f"   🔧 Optimizer: Adam (lr={config.LR}, weight_decay={weight_decay})")
+
     return optimizer
 
 
