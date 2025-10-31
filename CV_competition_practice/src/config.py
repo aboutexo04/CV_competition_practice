@@ -87,7 +87,15 @@ class Config:
         self.USE_LABEL_SMOOTHING = False
         self.LABEL_SMOOTHING_FACTOR = 0.1
 
-        self.USE_CLASS_WEIGHTS = False  # Class imbalance 대응 (statement of opinion 등)
+        # ============================================
+        # Class Imbalance 대응 설정
+        # ============================================
+        self.USE_CLASS_WEIGHTS = False
+        self.CLASS_WEIGHT_POWER = 0.7  # 0.5 (완화) ~ 1.0 (강함)
+        self.MANUAL_CLASS_WEIGHTS = {}  # 예: {8: 3.0} - 특정 클래스 가중치 수동 설정
+        
+        # Statement of Opinion 클래스 분석
+        self.OPINION_CLASS_ID = None  # TODO: 실제 클래스 ID 확인 후 입력 (0~16 중 하나)
 
         self.USE_ENSEMBLE = True
         self.SEED = 42
@@ -135,6 +143,15 @@ class Config:
         print(f"  - Dropout Rate:      {self.DROPOUT_RATE}")
         print(f"  - Weight Decay:      {self.WEIGHT_DECAY}")
         
+        print(f"\n⚖️  Class Imbalance 대응:")
+        print(f"  - Class Weights:     {'Yes' if self.USE_CLASS_WEIGHTS else 'No'}")
+        if self.USE_CLASS_WEIGHTS:
+            print(f"  - Weight Power:      {self.CLASS_WEIGHT_POWER}")
+            if self.MANUAL_CLASS_WEIGHTS:
+                print(f"  - Manual Weights:    {self.MANUAL_CLASS_WEIGHTS}")
+        if self.OPINION_CLASS_ID is not None:
+            print(f"  - Opinion Class ID:  {self.OPINION_CLASS_ID} (자동 분석 활성화)")
+        
         print(f"\n🖥️  디바이스:")
         print(f"  - Device:            {self.DEVICE}")
         
@@ -172,6 +189,10 @@ class QuickTestConfig(Config):
         self.SAVE_MODEL = False  # Quick test는 모델 저장 안함
         self.IMAGE_SIZE = 224
         self.LR = 0.0001
+        
+        # Class Imbalance - Quick Test에서는 비활성화
+        self.USE_CLASS_WEIGHTS = False
+        self.OPINION_CLASS_ID = None
 
 
 class DocumentConfig(Config):
@@ -194,6 +215,38 @@ class DocumentConfig(Config):
         self.WANDB_PROJECT = 'document-classification'
         self.USE_TTA = True
         self.SAVE_MODEL = True  # 본격 학습은 best model 저장
+        
+        # ============================================
+        # Class Imbalance 대응 (Statement of Opinion)
+        # ============================================
+        self.USE_CLASS_WEIGHTS = True
+        self.CLASS_WEIGHT_POWER = 0.7  # 처음엔 0.7로 시작 (적당한 강도)
+        self.MANUAL_CLASS_WEIGHTS = {}  # 분석 후 필요시 설정: {클래스ID: 배수}
+        
+        # TODO: meta.csv에서 "statement of opinion" 클래스의 실제 ID 확인 후 입력
+        # 예: self.OPINION_CLASS_ID = 8
+        self.OPINION_CLASS_ID = None  # 0~16 중 하나
+
+
+class OpinionFocusedConfig(DocumentConfig):
+    """Statement of Opinion 클래스에 집중한 설정"""
+    def __init__(self):
+        super().__init__()
+        
+        # Opinion 클래스 강화 설정
+        self.USE_CLASS_WEIGHTS = True
+        self.CLASS_WEIGHT_POWER = 0.7
+        
+        # TODO: Opinion 클래스 ID 확인 후 설정
+        # 예: self.OPINION_CLASS_ID = 8
+        # 예: self.MANUAL_CLASS_WEIGHTS = {8: 3.0}
+        self.OPINION_CLASS_ID = None  # 실제 ID로 변경 필요
+        self.MANUAL_CLASS_WEIGHTS = {}  # 분석 후 설정: {OPINION_CLASS_ID: 3.0}
+        
+        # 학습 설정 조정
+        self.PATIENCE = 15  # 더 오래 기다림
+        self.EARLY_STOPPING_DELTA = 0.001  # 미세한 개선도 인정
+
 
 # ==========================================
 # 기본 config 인스턴스
@@ -214,6 +267,7 @@ DEVICE = config.DEVICE
 device = config.DEVICE
 USE_TTA = config.USE_TTA
 TTA_TRANSFORMS = config.TTA_TRANSFORMS
+
 # 편의 함수들
 def print_config():
     config.print_config()
@@ -230,6 +284,7 @@ __all__ = [
     'Config',
     'QuickTestConfig',
     'DocumentConfig',
+    'OpinionFocusedConfig',
     
     # 인스턴스
     'config',
@@ -248,6 +303,7 @@ __all__ = [
     'device',
     'USE_TTA',
     'TTA_TRANSFORMS',
+    
     # 함수들
     'print_config',
     'update_config',
