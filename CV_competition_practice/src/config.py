@@ -65,7 +65,8 @@ class Config:
         self.EPOCHS = 100
         self.LR = 0.001
         self.PATIENCE = 5
-        
+        self.EARLY_STOPPING_DELTA = 0.001  # Early stopping minimum improvement threshold
+
         # K-Fold 설정
         self.N_FOLDS = 5
         
@@ -126,7 +127,7 @@ class Config:
         print(f"  - Epochs:            {self.EPOCHS}")
         print(f"  - Learning Rate:     {self.LR}")
         print(f"  - K-Fold:            {self.N_FOLDS}")
-        print(f"  - Early Stop:        {self.PATIENCE} epochs")
+        print(f"  - Early Stop:        {self.PATIENCE} epochs (delta={self.EARLY_STOPPING_DELTA})")
 
         print(f"\n🛡️  정규화 설정:")
         print(f"  - Dropout Rate:      {self.DROPOUT_RATE}")
