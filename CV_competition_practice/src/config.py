@@ -87,6 +87,8 @@ class Config:
         self.USE_LABEL_SMOOTHING = False
         self.LABEL_SMOOTHING_FACTOR = 0.1
 
+        self.USE_CLASS_WEIGHTS = False  # Class imbalance 대응 (statement of opinion 등)
+
         self.USE_ENSEMBLE = True
         self.SEED = 42
         self.DETERMINISTIC = True

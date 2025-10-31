@@ -264,6 +264,32 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         ).to(device)
         optimizer = get_optimizer(model, config)
         
+        # Class weights 계산 (클래스 불균형 대응)
+        use_class_weights = getattr(config, 'USE_CLASS_WEIGHTS', False)
+        class_weights = None
+
+        if use_class_weights:
+            from collections import Counter
+            import numpy as np
+
+            # 현재 fold의 train 레이블로 가중치 계산
+            train_labels_fold = [train_labels[i] for i in train_idx]
+            class_counts = Counter(train_labels_fold)
+
+            # Inverse frequency weighting
+            total_samples = len(train_labels_fold)
+            weights = []
+            for class_id in range(num_classes):
+                count = class_counts.get(class_id, 1)  # 0 방지
+                weight = total_samples / (num_classes * count)
+                weights.append(weight)
+
+            class_weights = torch.FloatTensor(weights).to(device)
+
+            if fold == 0:
+                print(f"✅ Class Weights 적용:")
+                print(f"   Min weight: {min(weights):.3f}, Max weight: {max(weights):.3f}")
+
         # Loss 함수 선택
         if config.USE_LABEL_SMOOTHING:
             criterion = LabelSmoothingLoss(
@@ -273,9 +299,15 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
             if fold == 0:  # 첫 번째 fold에서만 출력
                 print(f"✅ Label Smoothing 사용 (smoothing={config.LABEL_SMOOTHING_FACTOR})")
         else:
-            criterion = nn.CrossEntropyLoss()
+            # Class weights 적용
+            if class_weights is not None:
+                criterion = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                criterion = nn.CrossEntropyLoss()
+
             if fold == 0:
-                print("✅ CrossEntropyLoss 사용")
+                weight_msg = " with Class Weights" if class_weights is not None else ""
+                print(f"✅ CrossEntropyLoss 사용{weight_msg}")
         
         # Scheduler & Early Stopping
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
