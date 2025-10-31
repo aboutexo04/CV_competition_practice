@@ -4,6 +4,24 @@ __pycache__/
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual environments
 venv/
@@ -25,11 +43,15 @@ env/
 
 # Data files (large files - should not be in git)
 data/
+data/raw/
 data.tar.gz
 *.csv
+*.json
 *.parquet
 *.pkl
 *.pickle
+*.h5
+*.hdf5
 
 # Model files (too large for git)
 models/
@@ -62,7 +84,11 @@ outputs/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Thumbnails
 ._*
+
+# Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
 .Spotlight-V100
@@ -70,3 +96,10 @@ outputs/
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
