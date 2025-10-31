@@ -14,47 +14,42 @@ from src.config import config
 # Augmentation 함수들
 # ============================================
 
-def get_albumentations_train(image_size):  # ✅ 파라미터명 통일
-    """일반 이미지용 augmentation - 강화 버전"""
+def get_albumentations_train(image_size):
+    """문서 이미지용 augmentation - 경량 버전 (과적합 방지)"""
 
     return A.Compose([
         A.Resize(image_size, image_size),
 
-        # 기하학적 변환 강화
-        A.HorizontalFlip(p=0.5),
-        A.Rotate(limit=10, p=0.5),
+        # 기하학적 변환 (문서에 적합하게 경량화)
+        A.HorizontalFlip(p=0.3),  # 50% → 30% (문서는 방향성 중요)
+        A.Rotate(limit=5, p=0.3),  # limit 10→5도, p 50%→30% (문서는 작은 회전만)
         A.ShiftScaleRotate(
-            shift_limit=0.1,
-            scale_limit=0.15,
-            rotate_limit=10,
-            p=0.5
+            shift_limit=0.05,      # 0.1 → 0.05 (이동 축소)
+            scale_limit=0.1,       # 0.15 → 0.1 (스케일 축소)
+            rotate_limit=5,        # 10 → 5도 (회전 축소)
+            p=0.3                  # 0.5 → 0.3 (확률 축소)
         ),
 
-        # 색상/명암 변환 추가
+        # 명암 변환만 (색상 변환 제거 - 문서는 주로 흑백/단색)
         A.RandomBrightnessContrast(
-            brightness_limit=0.2,
-            contrast_limit=0.2,
-            p=0.5
+            brightness_limit=0.15,  # 0.2 → 0.15 (밝기 축소)
+            contrast_limit=0.15,    # 0.2 → 0.15 (대비 축소)
+            p=0.3                   # 0.5 → 0.3 (확률 축소)
         ),
-        A.HueSaturationValue(
-            hue_shift_limit=10,
-            sat_shift_limit=20,
-            val_shift_limit=15,
-            p=0.4
-        ),
+        # HueSaturationValue 제거 (문서에 부적합)
 
-        # 노이즈 및 블러 추가
+        # 노이즈 및 블러 (확률 축소)
         A.OneOf([
-            A.GaussNoise(var_limit=(10, 50), p=1.0),
+            A.GaussNoise(var_limit=(5, 30), p=1.0),      # (10,50) → (5,30)
             A.GaussianBlur(blur_limit=(3, 5), p=1.0),
-            A.MotionBlur(blur_limit=5, p=1.0),
-        ], p=0.3),
+            A.MotionBlur(blur_limit=3, p=1.0),           # 5 → 3
+        ], p=0.2),  # 0.3 → 0.2 (확률 축소)
 
-        # 품질 저하 시뮬레이션
+        # 품질 저하 시뮬레이션 (확률 축소)
         A.OneOf([
-            A.ImageCompression(quality_lower=70, quality_upper=95, p=1.0),
-            A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1.0),
-        ], p=0.3),
+            A.ImageCompression(quality_lower=75, quality_upper=95, p=1.0),  # 70→75
+            A.Sharpen(alpha=(0.1, 0.3), lightness=(0.7, 1.0), p=1.0),      # 강도 축소
+        ], p=0.2),  # 0.3 → 0.2 (확률 축소)
 
         # 정규화
         A.Normalize(
@@ -168,16 +163,20 @@ def get_hybrid_train(image_size, augraphy_strength='light'):  # ✅ 파라미터
         return result
     
     return A.Compose([
-        # Augraphy 적용
-        A.Lambda(image=apply_augraphy_safe),  # ✅ 수정
-        
-        # 일반 augmentation
-        A.Rotate(limit=3, p=0.4),
-        A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.15, p=0.4),
-        A.GaussNoise(var_limit=(5, 30), p=0.2),
-        
+        # Augraphy 적용 (문서 특화 augmentation)
+        A.Lambda(image=apply_augraphy_safe),
+
+        # 추가 일반 augmentation (경량화)
+        A.Rotate(limit=3, p=0.3),  # 0.4 → 0.3 (확률 축소)
+        A.RandomBrightnessContrast(
+            brightness_limit=0.1,   # 0.15 → 0.1 (밝기 축소)
+            contrast_limit=0.1,     # 0.15 → 0.1 (대비 축소)
+            p=0.3                   # 0.4 → 0.3 (확률 축소)
+        ),
+        A.GaussNoise(var_limit=(3, 20), p=0.15),  # (5,30)→(3,20), p 0.2→0.15
+
         # 전처리
-        A.Resize(image_size, image_size),  # ✅ 수정
+        A.Resize(image_size, image_size),
         A.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225]
@@ -213,10 +212,10 @@ def get_train_augmentation(image_size, config):  # ✅ 시그니처 수정
     # Auto 모드: 데이터셋에 맞게 자동 선택
     if strategy == 'auto':
         if dataset_type in ['document', 'text', 'ocr']:
-            strategy = 'albumentations'  # 기본적으로 albumentations
+            strategy = 'hybrid'  # 문서는 hybrid (Augraphy + Albumentations)
         else:
-            strategy = 'albumentations'
-        
+            strategy = 'albumentations'  # 일반 이미지
+
         print(f"📌 Auto mode: {dataset_type} → {strategy} augmentation")
     
     # 전략별 augmentation
