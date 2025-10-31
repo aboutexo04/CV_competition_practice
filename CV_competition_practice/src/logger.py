@@ -10,14 +10,16 @@ from pathlib import Path
 def log_experiment_results(fold_results, results, config):
     """
     실험 결과를 마크다운 파일로 간단히 저장
-    
+
     Args:
         fold_results: K-Fold 학습 결과
         results: 테스트 결과
         config: Config 객체
     """
-    # 저장 경로
-    project_root = Path.cwd().parent
+    # 저장 경로 (src/logger.py 기준으로 상위 디렉토리의 logs 폴더)
+    # CV_competition_practice/src/logger.py → CV_competition_practice/logs/
+    current_file = Path(__file__).resolve()
+    project_root = current_file.parent.parent  # src/ → CV_competition_practice/
     log_dir = project_root / 'logs'
     log_dir.mkdir(exist_ok=True)
     
