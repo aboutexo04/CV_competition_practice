@@ -48,15 +48,19 @@ class Config:
         self.BATCH_SIZE = 32
         self.USE_SUBSET = False
         self.SUBSET_RATIO = 0.1
-        
+
         # Augmentation 설정
         self.AUG_STRATEGY = 'auto' # albumentations | augraphy | hybrid | auto
         self.AUGRAPHY_STRENGTH = 'light' # light | medium | heavy
-        
+
         # 모델 설정
         self.MODEL_NAME = 'efficientnet_b0'
         self.NUM_CLASSES = 17  # meta.csv에 0~16까지 17개 클래스
-        
+
+        # 정규화 설정 (Overfitting Prevention)
+        self.DROPOUT_RATE = 0.3  # Dropout 비율 (0.0 ~ 0.5 권장)
+        self.WEIGHT_DECAY = 5e-4  # L2 regularization (1e-4 ~ 1e-3 권장)
+
         # 학습 설정
         self.EPOCHS = 100
         self.LR = 0.001
@@ -123,6 +127,10 @@ class Config:
         print(f"  - Learning Rate:     {self.LR}")
         print(f"  - K-Fold:            {self.N_FOLDS}")
         print(f"  - Early Stop:        {self.PATIENCE} epochs")
+
+        print(f"\n🛡️  정규화 설정:")
+        print(f"  - Dropout Rate:      {self.DROPOUT_RATE}")
+        print(f"  - Weight Decay:      {self.WEIGHT_DECAY}")
         
         print(f"\n🖥️  디바이스:")
         print(f"  - Device:            {self.DEVICE}")

@@ -269,7 +269,8 @@ def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_tran
     all_predictions = []
 
     for fold_idx, fold_result in enumerate(fold_results):
-        fold_model = get_model(model_name, num_classes, pretrained=False)
+        # 추론 시에는 dropout 비활성화 (dropout_rate=0.0)
+        fold_model = get_model(model_name, num_classes, pretrained=False, dropout_rate=0.0)
         fold_model.load_state_dict(fold_result['best_model_state'])
         fold_model = fold_model.to(device)
         fold_model.eval()
@@ -638,8 +639,8 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config, train_d
         val_dataset = TransformSubset(val_subset, val_transform)
         val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
 
-        # 모델 로드
-        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False)
+        # 모델 로드 (추론 시 dropout 비활성화)
+        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False, dropout_rate=0.0)
         fold_model.load_state_dict(fold_results[fold_idx]['best_model_state'])
         fold_model = fold_model.to(device)
         fold_model.eval()
@@ -695,7 +696,8 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config, train_d
     all_test_preds = []
 
     for fold_idx, fold_result in enumerate(fold_results):
-        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False)
+        # 추론 시 dropout 비활성화
+        fold_model = get_model(config.MODEL_NAME, config.NUM_CLASSES, pretrained=False, dropout_rate=0.0)
         fold_model.load_state_dict(fold_result['best_model_state'])
         fold_model = fold_model.to(device)
         fold_model.eval()

@@ -253,9 +253,15 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         )
         
         print(f"Train: {len(train_dataset):,}, Val: {len(val_dataset):,}")
-        
+
         # 모델 생성 (매 fold마다 새로 생성)
-        model = get_model(model_name, num_classes, pretrained=True).to(device)
+        dropout_rate = getattr(config, 'DROPOUT_RATE', 0.0)
+        model = get_model(
+            model_name,
+            num_classes,
+            pretrained=True,
+            dropout_rate=dropout_rate
+        ).to(device)
         optimizer = get_optimizer(model, config)
         
         # Loss 함수 선택
