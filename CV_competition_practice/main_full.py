@@ -82,6 +82,8 @@ def train(
     use_tta=False,
     use_balanced_sampling=True,
     train_final_model=True,
+    dropout_rate=0.3,
+    weight_decay=5e-4,
 
     # Submission settings
     create_submission=True,
@@ -117,6 +119,8 @@ def train(
         use_tta: Use Test Time Augmentation
         use_balanced_sampling: Use class-balanced sampling (WeightedRandomSampler)
         train_final_model: Create final model submission (model is always trained and saved)
+        dropout_rate: Dropout rate for model (0.0-0.5 recommended)
+        weight_decay: L2 regularization weight decay (1e-5 to 1e-3 recommended)
         create_submission: Create submission file after training
         save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
@@ -154,6 +158,8 @@ def train(
         USE_TTA=use_tta,
         USE_CLASS_BALANCED_SAMPLING=use_balanced_sampling,
         TRAIN_FINAL_MODEL=train_final_model,
+        DROPOUT_RATE=dropout_rate,
+        WEIGHT_DECAY=weight_decay,
         USE_WANDB=use_wandb,
         WANDB_PROJECT=wandb_project,
         SEED=seed,
