@@ -93,7 +93,10 @@ class Config:
         self.USE_CLASS_WEIGHTS = False
         self.CLASS_WEIGHT_POWER = 0.7  # 0.5 (완화) ~ 1.0 (강함)
         self.MANUAL_CLASS_WEIGHTS = {}  # 예: {8: 3.0} - 특정 클래스 가중치 수동 설정
-        
+
+        # Class-Balanced Sampling (Oversampling 효과)
+        self.USE_CLASS_BALANCED_SAMPLING = False  # WeightedRandomSampler 사용 여부
+
         # Statement of Opinion 클래스 분석
         self.OPINION_CLASS_ID = 14  # TODO: 실제 클래스 ID 확인 후 입력 (0~16 중 하나)
 
@@ -149,6 +152,7 @@ class Config:
             print(f"  - Weight Power:      {self.CLASS_WEIGHT_POWER}")
             if self.MANUAL_CLASS_WEIGHTS:
                 print(f"  - Manual Weights:    {self.MANUAL_CLASS_WEIGHTS}")
+        print(f"  - Balanced Sampling: {'Yes' if self.USE_CLASS_BALANCED_SAMPLING else 'No'}")
         if self.OPINION_CLASS_ID is not None:
             print(f"  - Opinion Class ID:  {self.OPINION_CLASS_ID} (자동 분석 활성화)")
         

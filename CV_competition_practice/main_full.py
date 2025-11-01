@@ -80,6 +80,7 @@ def train(
     use_label_smoothing=False,
     label_smoothing_factor=0.1,
     use_tta=False,
+    use_balanced_sampling=False,
 
     # Submission settings
     create_submission=True,
@@ -113,6 +114,7 @@ def train(
         use_label_smoothing: Use label smoothing loss
         label_smoothing_factor: Label smoothing factor (0.0-1.0)
         use_tta: Use Test Time Augmentation
+        use_balanced_sampling: Use class-balanced sampling (WeightedRandomSampler)
         create_submission: Create submission file after training
         save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
@@ -148,6 +150,7 @@ def train(
         USE_LABEL_SMOOTHING=use_label_smoothing,
         LABEL_SMOOTHING_FACTOR=label_smoothing_factor,
         USE_TTA=use_tta,
+        USE_CLASS_BALANCED_SAMPLING=use_balanced_sampling,
         USE_WANDB=use_wandb,
         WANDB_PROJECT=wandb_project,
         SEED=seed,

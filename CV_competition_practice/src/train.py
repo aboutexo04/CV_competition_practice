@@ -8,7 +8,8 @@ import copy
 from tqdm import tqdm
 from sklearn.metrics import f1_score, classification_report
 from sklearn.model_selection import StratifiedKFold
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from collections import Counter
 from src.model import LabelSmoothingLoss
 
 
@@ -329,11 +330,48 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         # Transform 적용
         train_dataset = TransformSubset(train_subset, train_transform)
         val_dataset = TransformSubset(val_subset, val_transform)
-        
+
+        # Class-Balanced Sampling 설정
+        use_balanced_sampling = getattr(config, 'USE_CLASS_BALANCED_SAMPLING', False)
+        sampler = None
+        shuffle = True
+
+        if use_balanced_sampling:
+            # 현재 fold의 train 레이블 추출
+            train_labels_fold = [train_labels[i] for i in train_idx]
+
+            # 클래스별 샘플 수 계산
+            class_counts = Counter(train_labels_fold)
+
+            # 각 클래스의 가중치 계산 (inverse frequency)
+            class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
+
+            # 각 샘플의 가중치 계산
+            sample_weights = [class_weights[label] for label in train_labels_fold]
+
+            # WeightedRandomSampler 생성
+            sampler = WeightedRandomSampler(
+                weights=sample_weights,
+                num_samples=len(sample_weights),
+                replacement=True  # 복원 추출 (oversampling 효과)
+            )
+            shuffle = False  # sampler 사용 시 shuffle은 False
+
+            if fold == 0:  # 첫 번째 fold에서만 출력
+                print(f"\n✅ Class-Balanced Sampling 활성화")
+                print(f"   샘플별 가중치로 균형잡힌 샘플링 수행")
+                # 가장 적은 클래스 3개 표시
+                sorted_classes = sorted(class_counts.items(), key=lambda x: x[1])
+                print(f"   가장 적은 클래스 샘플링 비율:")
+                for class_id, count in sorted_classes[:3]:
+                    weight = class_weights[class_id]
+                    print(f"     Class {class_id}: {count}개 → weight {weight:.4f} (샘플링 확률 {weight*count:.1f}배)")
+
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=shuffle,
+            sampler=sampler,
             num_workers=0,
             collate_fn=safe_collate_fn
         )
@@ -363,9 +401,6 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         class_weights = None
 
         if use_class_weights:
-            from collections import Counter
-            import numpy as np
-
             # 현재 fold의 train 레이블로 가중치 계산
             train_labels_fold = [train_labels[i] for i in train_idx]
             class_counts = Counter(train_labels_fold)
