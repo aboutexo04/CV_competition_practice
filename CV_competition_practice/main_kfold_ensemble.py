@@ -49,7 +49,7 @@ from src.utils import set_seed
 
 
 def submit_from_fold_results(
-    use_tta=False,
+    use_tta=True,
     batch_size=32,
     seed=42,
 ):
