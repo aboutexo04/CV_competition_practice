@@ -3,16 +3,20 @@
 """
 Ensemble Script for Final Submission
 
-Combines predictions from multiple trained models for better performance.
+Combines predictions from multiple FINAL models (trained on 100% data) for better performance.
+
+IMPORTANT: This script only loads *_final_*.pth checkpoints (models trained on full data).
+           Make sure you have trained models using main_full.py first.
 
 Usage:
-    # Ensemble with default models
-    python main_ensemble.py
+    # Ensemble different model architectures
+    python main_ensemble.py --models tf_efficientnetv2_m,convnext_base,vit_base_patch16_224
 
-    # Ensemble with Fire CLI
-    python main_ensemble.py --models efficientnet_b0,efficientnet_b1,resnet50
-    python main_ensemble.py --models efficientnet_b0,resnet50 --weights 0.6,0.4
-    python main_ensemble.py --ensemble_method=voting
+    # Ensemble with custom weights
+    python main_ensemble.py --models tf_efficientnetv2_m,resnet50 --weights 0.6,0.4
+
+    # Use voting instead of averaging
+    python main_ensemble.py --models tf_efficientnetv2_m,convnext_base --ensemble_method=voting
 """
 
 import sys
@@ -43,14 +47,14 @@ from torch.utils.data import DataLoader
 
 def load_trained_models(model_names, num_classes, device, models_dir='models', load_all_checkpoints=False):
     """
-    Load trained models from checkpoint files
+    Load trained models from checkpoint files (FINAL models only)
 
     Args:
-        model_names: List of model names to load (or 'all' to load all checkpoints for a single model)
+        model_names: List of model names to load
         num_classes: Number of classes
         device: Device to load models on
         models_dir: Directory containing saved model checkpoints
-        load_all_checkpoints: If True, load all checkpoints for each model name
+        load_all_checkpoints: Deprecated (kept for compatibility, always loads final model only)
 
     Returns:
         List of loaded models
@@ -58,27 +62,27 @@ def load_trained_models(model_names, num_classes, device, models_dir='models', l
     models = []
     models_path = Path(models_dir)
 
-    print(f"\nLoading models...")
+    print(f"\nLoading FINAL models (100% data trained)...")
 
     for model_name in model_names:
         print(f"\n  Loading {model_name}...")
 
-        # Find checkpoint files
-        checkpoint_pattern = f"*{model_name}*.pth"
+        # Find FINAL checkpoint files only
+        checkpoint_pattern = f"*{model_name}*_final_*.pth"
         checkpoint_files = sorted(list(models_path.glob(checkpoint_pattern)))
 
         if not checkpoint_files:
-            print(f"    Warning: No checkpoint found for {model_name}")
+            print(f"    ❌ Warning: No FINAL checkpoint found for {model_name}")
+            print(f"       Looking for pattern: {checkpoint_pattern}")
+            print(f"       Make sure you have trained the model with main_full.py")
             continue
 
-        # Load all checkpoints for this model name if requested
-        if load_all_checkpoints:
-            print(f"    Found {len(checkpoint_files)} checkpoints, loading all...")
-            checkpoint_files_to_load = checkpoint_files
+        # Always use the first (or only) final checkpoint
+        checkpoint_files_to_load = [checkpoint_files[0]]
+        if len(checkpoint_files) > 1:
+            print(f"    Found {len(checkpoint_files)} final checkpoints, using {checkpoint_files[0].name}")
         else:
-            checkpoint_files_to_load = [checkpoint_files[0]]
-            if len(checkpoint_files) > 1:
-                print(f"    Found {len(checkpoint_files)} checkpoints, using {checkpoint_files[0].name}")
+            print(f"    Found final checkpoint: {checkpoint_files[0].name}")
 
         # Load each checkpoint
         for checkpoint_file in checkpoint_files_to_load:
@@ -211,9 +215,9 @@ def run_ensemble(
 
     # Parse model names
     if models is None:
-        # Default models
-        model_names = ['efficientnet_b0', 'efficientnet_b1', 'resnet50']
-        print("\nUsing default models:")
+        # Default models (update these based on what you've trained)
+        model_names = ['tf_efficientnetv2_m']
+        print("\nUsing default model (please specify --models for ensemble):")
     else:
         model_names = [m.strip() for m in models.split(',')]
         print(f"\nUsing specified models:")
@@ -338,27 +342,29 @@ def run_ensemble(
     submission_dir = Path('submissions')
     submission_dir.mkdir(exist_ok=True)
 
-    # Extract F1 scores from checkpoint filenames for ensemble
-    # If multiple checkpoints, use average F1 score
+    # Extract CV F1 scores from FINAL checkpoint filenames
+    # Pattern: model_name_final_cvf1_0.8523.pth
     import re
     f1_scores = []
     for model_name in model_names:
-        checkpoint_pattern = f"*{model_name}*.pth"
+        checkpoint_pattern = f"*{model_name}*_final_*.pth"
         checkpoint_files = sorted(list(Path('models').glob(checkpoint_pattern)))
         for checkpoint_file in checkpoint_files:
-            # Extract F1 score from filename (e.g., "model_best_f1_0.9304.pth")
-            match = re.search(r'f1_([\d.]+)', checkpoint_file.stem, re.IGNORECASE)
+            # Extract CV F1 score from filename (e.g., "model_final_cvf1_0.8523.pth")
+            match = re.search(r'cvf1_([\d.]+)', checkpoint_file.stem, re.IGNORECASE)
             if match:
                 f1_scores.append(float(match.group(1)))
-    
-    # Use average F1 if available, otherwise 0.0
+                break  # Only use first final checkpoint per model
+
+    # Use average CV F1 if available, otherwise 0.0
     ensemble_f1 = np.mean(f1_scores) if f1_scores else 0.0
 
     save_submission(
         preds=predictions,
         sample_path=config.SUBMISSION_PATH,
         save_path=submission_dir,
-        f1_score=ensemble_f1
+        f1_score=ensemble_f1,
+        suffix='ensemble'
     )
 
     # ============================================
@@ -370,11 +376,12 @@ def run_ensemble(
 
     print(f"\nEnsemble Configuration:")
     print(f"  Models: {', '.join(model_names)}")
+    print(f"  Number of models: {len(models_list)}")
     print(f"  Method: {ensemble_method}")
     if weights:
         print(f"  Weights: {weights}")
     print(f"  Total predictions: {len(predictions):,}")
-    print(f"  Output file: {output_path}")
+    print(f"  Average CV F1 Score: {ensemble_f1:.4f}")
 
     print("\nClass Distribution:")
     for i, class_name in enumerate(class_names):

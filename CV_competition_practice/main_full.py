@@ -46,7 +46,7 @@ if str(project_root) not in sys.path:
 # ============================================
 from src.config import DocumentConfig
 from src.data import load_data
-from src.train import run_kfold_training
+from src.train import run_kfold_training, train_on_full_data
 from src.evaluation import run_full_evaluation, evaluate_ensemble
 from src.logger import log_experiment_results
 from src.submission import save_submission
@@ -81,6 +81,7 @@ def train(
     label_smoothing_factor=0.1,
     use_tta=False,
     use_balanced_sampling=True,
+    train_final_model=True,
 
     # Submission settings
     create_submission=True,
@@ -115,6 +116,7 @@ def train(
         label_smoothing_factor: Label smoothing factor (0.0-1.0)
         use_tta: Use Test Time Augmentation
         use_balanced_sampling: Use class-balanced sampling (WeightedRandomSampler)
+        train_final_model: Create final model submission (model is always trained and saved)
         create_submission: Create submission file after training
         save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
@@ -151,6 +153,7 @@ def train(
         LABEL_SMOOTHING_FACTOR=label_smoothing_factor,
         USE_TTA=use_tta,
         USE_CLASS_BALANCED_SAMPLING=use_balanced_sampling,
+        TRAIN_FINAL_MODEL=train_final_model,
         USE_WANDB=use_wandb,
         WANDB_PROJECT=wandb_project,
         SEED=seed,
@@ -225,9 +228,19 @@ def train(
     print("\n" + "="*70)
     print("K-Fold Training Complete!")
     print("="*70)
-        
+
     # ============================================
-    # 5. Evaluation (if test data exists)
+    # 5. Train Final Model on Full Data (always)
+    # ============================================
+    final_model_result = train_on_full_data(
+        train_dataset_raw=train_dataset_raw,
+        train_labels=train_labels,
+        fold_results=fold_results,
+        config=config
+    )
+
+    # ============================================
+    # 6. Evaluation (if test data exists)
     # ============================================
     if test_dataset is not None:
         print("\n" + "="*70)
@@ -252,7 +265,7 @@ def train(
         results = None
 
     # ============================================
-    # 6. Log Experiment Results
+    # 7. Log Experiment Results
     # ============================================
     print("\n" + "="*70)
     print("Saving Experiment Results")
@@ -265,7 +278,7 @@ def train(
     )
 
     # ============================================
-    # 7. Wandb Finish
+    # 8. Wandb Finish
     # ============================================
     if config.USE_WANDB:
         import wandb
@@ -273,7 +286,7 @@ def train(
         print("\nWandb finished")
 
     # ============================================
-    # 8. Save Fold Results (optional)
+    # 9. Save Fold Results (optional)
     # ============================================
     if save_fold_results:
         print("\n" + "="*70)
@@ -290,22 +303,29 @@ def train(
         print(f"✅ Fold results saved: {fold_results_path}")
 
     # ============================================
-    # 9. Create Submission File (optional)
+    # 10. Create Submission File (optional)
     # ============================================
     if create_submission and test_dataset is not None:
         print("\n" + "="*70)
-        print("Creating Submission File")
+        print("Creating Submission Files")
         print("="*70)
 
         submission_dir = Path('submissions')
         submission_dir.mkdir(exist_ok=True)
+
+        # ============================================
+        # 10-1. K-Fold Ensemble Submission
+        # ============================================
+        print("\n" + "="*50)
+        print("📊 K-Fold Ensemble Submission")
+        print("="*50)
 
         # Create submissions (standard and optionally TTA)
         tta_list = [False, True] if use_tta else [False]
 
         for use_tta_flag in tta_list:
             tta_label = "with TTA" if use_tta_flag else "standard"
-            print(f"\n{'🔄' if use_tta_flag else '📝'} Creating {tta_label} submission...")
+            print(f"\n{'🔄' if use_tta_flag else '📝'} Creating K-Fold ensemble {tta_label} submission...")
 
             _, test_f1, predictions, _ = evaluate_ensemble(
                 fold_results=fold_results,
@@ -320,15 +340,49 @@ def train(
                     preds=predictions,
                     sample_path=config.SUBMISSION_PATH,
                     save_path=submission_dir,
-                    f1_score=test_f1
+                    f1_score=test_f1,
+                    suffix='kfold'
                 )
             except Exception as e:
                 print(f"❌ Error: {e}")
                 if not use_tta_flag:  # Stop if standard submission fails
                     return
 
+        # ============================================
+        # 10-2. Final Model (Full Data) Submission
+        # ============================================
+        if config.TRAIN_FINAL_MODEL and final_model_result is not None:
+            print("\n" + "="*50)
+            print("🚀 Final Model (100% data) Submission")
+            print("="*50)
+
+            from src.evaluation import evaluate_single_model
+
+            for use_tta_flag in tta_list:
+                tta_label = "with TTA" if use_tta_flag else "standard"
+                print(f"\n{'🔄' if use_tta_flag else '📝'} Creating final model {tta_label} submission...")
+
+                _, test_f1, predictions, _ = evaluate_single_model(
+                    model=final_model_result['model'],
+                    test_dataset=test_dataset,
+                    config=config,
+                    use_tta=use_tta_flag,
+                    tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original']
+                )
+
+                try:
+                    save_submission(
+                        preds=predictions,
+                        sample_path=config.SUBMISSION_PATH,
+                        save_path=submission_dir,
+                        f1_score=final_model_result['avg_val_f1'],  # CV F1 참고용
+                        suffix='final'
+                    )
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+
     # ============================================
-    # 10. Summary
+    # 11. Summary
     # ============================================
     print("\n" + "="*70)
     print("Training Complete!")

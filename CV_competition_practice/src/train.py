@@ -597,3 +597,186 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         print("\n⏭️  Model saving disabled (SAVE_MODEL=False)")
 
     return fold_results
+
+
+def train_on_full_data(train_dataset_raw, train_labels, fold_results, config):
+    """
+    K-Fold 완료 후 전체 데이터로 최종 모델 학습
+
+    Args:
+        train_dataset_raw: 전체 train 데이터셋
+        train_labels: 전체 train 레이블
+        fold_results: K-Fold 결과 (best epoch 계산용)
+        config: Config 객체
+
+    Returns:
+        final_model_state: 최종 모델의 state_dict
+    """
+    from src.model import create_model
+    from src.augmentation import get_augmentation
+    from torch.utils.data import DataLoader
+    from pathlib import Path
+
+    print("\n" + "=" * 70)
+    print("🚀 Training Final Model on Full Data")
+    print("=" * 70)
+
+    # ============================================
+    # 1. 평균 best epoch 계산
+    # ============================================
+    avg_best_epoch = int(np.mean([r['best_epoch'] for r in fold_results]))
+    print(f"\n📊 Average best epoch from K-Fold: {avg_best_epoch}")
+    print(f"   Training final model for {avg_best_epoch} epochs on 100% data")
+
+    # ============================================
+    # 2. 데이터 준비
+    # ============================================
+    train_transform = get_augmentation(
+        image_size=config.IMAGE_SIZE,
+        aug_strategy=config.AUG_STRATEGY,
+        augraphy_strength=config.AUGRAPHY_STRENGTH,
+        is_train=True
+    )
+
+    # Transform 적용
+    train_dataset_raw.transform = train_transform
+
+    # ============================================
+    # 3. DataLoader 생성
+    # ============================================
+    batch_size = config.BATCH_SIZE
+    num_workers = config.NUM_WORKERS
+
+    # Class-balanced sampling (if enabled)
+    sampler = None
+    shuffle = True
+
+    if config.USE_CLASS_BALANCED_SAMPLING:
+        print(f"\n✅ Using class-balanced sampling for final model")
+
+        class_counts = Counter(train_labels)
+        class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
+        sample_weights = [class_weights[label] for label in train_labels]
+
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        shuffle = False
+
+    train_loader = DataLoader(
+        train_dataset_raw,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        sampler=sampler,
+        num_workers=num_workers,
+        pin_memory=True if config.DEVICE.type in ['cuda', 'mps'] else False
+    )
+
+    # ============================================
+    # 4. 모델 생성
+    # ============================================
+    model = create_model(
+        model_name=config.MODEL_NAME,
+        num_classes=config.NUM_CLASSES,
+        dropout_rate=config.DROPOUT_RATE
+    ).to(config.DEVICE)
+
+    # ============================================
+    # 5. Loss & Optimizer
+    # ============================================
+    if config.USE_LABEL_SMOOTHING:
+        criterion = LabelSmoothingLoss(
+            num_classes=config.NUM_CLASSES,
+            smoothing=config.LABEL_SMOOTHING_FACTOR
+        )
+        print(f"\n✅ Using Label Smoothing (factor={config.LABEL_SMOOTHING_FACTOR})")
+    else:
+        criterion = nn.CrossEntropyLoss()
+
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=config.LR,
+        weight_decay=config.WEIGHT_DECAY
+    )
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='min',
+        factor=0.5,
+        patience=3,
+        verbose=True
+    )
+
+    # ============================================
+    # 6. 학습 루프
+    # ============================================
+    print(f"\n{'='*70}")
+    print(f"Training on {len(train_dataset_raw)} samples for {avg_best_epoch} epochs")
+    print(f"{'='*70}")
+
+    model.train()
+
+    for epoch in range(avg_best_epoch):
+        running_loss = 0.0
+        correct = 0
+        total = 0
+
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{avg_best_epoch}")
+
+        for inputs, labels in pbar:
+            inputs = inputs.to(config.DEVICE)
+            labels = labels.to(config.DEVICE)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+            pbar.set_postfix({
+                'loss': f'{running_loss/len(pbar):.4f}',
+                'acc': f'{100.*correct/total:.2f}%'
+            })
+
+        epoch_loss = running_loss / len(train_loader)
+        epoch_acc = 100. * correct / total
+
+        print(f"Epoch {epoch+1}/{avg_best_epoch} - Loss: {epoch_loss:.4f}, Acc: {epoch_acc:.2f}%")
+
+        scheduler.step(epoch_loss)
+
+    # ============================================
+    # 7. 최종 모델 저장
+    # ============================================
+    print("\n" + "=" * 70)
+    print("💾 Saving Final Model")
+    print("=" * 70)
+
+    models_dir = Path(getattr(config, 'MODELS_DIR', 'models'))
+    models_dir.mkdir(exist_ok=True)
+
+    # 평균 validation F1 (참고용)
+    avg_val_f1 = np.mean([r['best_val_f1'] for r in fold_results])
+
+    model_filename = f"{config.MODEL_NAME}_final_cvf1_{avg_val_f1:.4f}.pth"
+    model_path = models_dir / model_filename
+
+    torch.save(model.state_dict(), model_path)
+
+    print(f"✅ Final model saved: {model_path}")
+    print(f"   Trained on 100% data for {avg_best_epoch} epochs")
+    print(f"   Estimated CV F1: {avg_val_f1:.4f}")
+    print("=" * 70)
+
+    return {
+        'model': model,
+        'state_dict': model.state_dict(),
+        'avg_val_f1': avg_val_f1
+    }

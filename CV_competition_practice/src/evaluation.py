@@ -353,6 +353,88 @@ def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_tran
     return test_acc, test_f1, ensemble_preds, test_labels
 
 
+def evaluate_single_model(model, test_dataset, config, use_tta=False, tta_transforms=None):
+    """
+    단일 모델 평가 (전체 데이터로 학습한 최종 모델용)
+
+    Args:
+        model: 학습된 모델
+        test_dataset: 테스트 데이터셋
+        config: Config 객체
+        use_tta: TTA 사용 여부
+        tta_transforms: TTA 변환 리스트
+
+    Returns:
+        test_acc, test_f1, predictions, test_labels
+    """
+    device = config.DEVICE
+    batch_size = config.BATCH_SIZE
+
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+
+    print("🔮 단일 모델 예측 시작...")
+
+    model.eval()
+    all_preds = []
+
+    with torch.no_grad():
+        for images, labels in tqdm(test_loader, desc="예측 중", leave=True):
+            if use_tta:
+                # TTA 적용
+                probs = test_time_augmentation(model, images, device, tta_transforms)
+                all_preds.append(probs.cpu().numpy())
+            else:
+                # 일반 예측
+                images = images.to(device)
+                outputs = model(images)
+                probs = torch.softmax(outputs, dim=1)
+                all_preds.append(probs.cpu().numpy())
+
+    all_preds = np.concatenate(all_preds, axis=0)
+    predictions = np.argmax(all_preds, axis=1)
+
+    print(f"✅ 예측 완료! (predictions shape: {all_preds.shape})")
+
+    # 실제 레이블
+    test_labels = [label for _, label in test_dataset]
+
+    # 레이블 확인
+    has_true_labels = False
+    if test_labels and len(test_labels) > 0:
+        valid_labels = [label for label in test_labels if label != -1 and label >= 0]
+        has_true_labels = len(valid_labels) > 0
+
+    if has_true_labels:
+        # 평가 지표 계산
+        valid_indices = [i for i, label in enumerate(test_labels) if label != -1 and label >= 0]
+        valid_test_labels = [test_labels[i] for i in valid_indices]
+        valid_predictions = [predictions[i] for i in valid_indices]
+
+        test_f1 = f1_score(valid_test_labels, valid_predictions, average='macro')
+        test_acc = 100. * np.sum(np.array(valid_predictions) == np.array(valid_test_labels)) / len(valid_test_labels)
+
+        print("\n" + "=" * 70)
+        print("🎯 Test Set 최종 결과 (단일 모델)")
+        print("=" * 70)
+        print(f"Test Accuracy: {test_acc:.2f}%")
+        print(f"Test Macro F1 Score: {test_f1:.4f}")
+        print(f"✅ 실제 테스트 레이블로 계산된 정확한 F1 스코어입니다.")
+        print("=" * 70)
+    else:
+        # 실제 테스트 데이터 - 레이블 없음
+        test_f1 = 0.0
+        test_acc = 0.0
+        print("\n" + "=" * 70)
+        print("🎯 Test Set 최종 결과 (단일 모델)")
+        print("=" * 70)
+        print("⚠️  실제 테스트 데이터는 레이블이 없어 평가할 수 없습니다.")
+        print(f"✅ 예측 완료: {len(predictions):,}개 샘플")
+        print("📝 제출 파일을 생성하여 대회에 제출하세요.")
+        print("=" * 70)
+
+    return test_acc, test_f1, predictions, test_labels
+
+
 def plot_training_curves(fold_results):
     """
     K-Fold 학습 곡선 시각화
