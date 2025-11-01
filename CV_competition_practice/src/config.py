@@ -95,7 +95,7 @@ class Config:
         self.MANUAL_CLASS_WEIGHTS = {}  # 예: {8: 3.0} - 특정 클래스 가중치 수동 설정
         
         # Statement of Opinion 클래스 분석
-        self.OPINION_CLASS_ID = None  # TODO: 실제 클래스 ID 확인 후 입력 (0~16 중 하나)
+        self.OPINION_CLASS_ID = 14  # TODO: 실제 클래스 ID 확인 후 입력 (0~16 중 하나)
 
         self.USE_ENSEMBLE = True
         self.SEED = 42
@@ -219,13 +219,13 @@ class DocumentConfig(Config):
         # ============================================
         # Class Imbalance 대응 (Statement of Opinion)
         # ============================================
-        self.USE_CLASS_WEIGHTS = True
+        self.USE_CLASS_WEIGHTS = False
         self.CLASS_WEIGHT_POWER = 0.7  # 처음엔 0.7로 시작 (적당한 강도)
         self.MANUAL_CLASS_WEIGHTS = {}  # 분석 후 필요시 설정: {클래스ID: 배수}
         
         # TODO: meta.csv에서 "statement of opinion" 클래스의 실제 ID 확인 후 입력
         # 예: self.OPINION_CLASS_ID = 8
-        self.OPINION_CLASS_ID = None  # 0~16 중 하나
+        self.OPINION_CLASS_ID = 14  # 0~16 중 하나
 
 
 class OpinionFocusedConfig(DocumentConfig):
