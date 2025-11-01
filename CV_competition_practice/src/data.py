@@ -141,7 +141,7 @@ def get_hybrid_train(image_size, augraphy_strength='light'):  # ✅ 파라미터
         ink_p, paper_p, post_p = 0.2, 0.2, 0.2
     elif augraphy_strength == 'medium':
         ink_p, paper_p, post_p = 0.4, 0.4, 0.3
-    else:  # heavy
+    elif augraphy_strength == 'heavy':  # heavy
         ink_p, paper_p, post_p = 0.6, 0.5, 0.4
     
     # Augraphy 파이프라인

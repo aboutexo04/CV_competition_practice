@@ -360,12 +360,19 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
             if fold == 0:  # 첫 번째 fold에서만 출력
                 print(f"\n✅ Class-Balanced Sampling 활성화")
                 print(f"   샘플별 가중치로 균형잡힌 샘플링 수행")
-                # 가장 적은 클래스 3개 표시
+                # 가장 적은 클래스와 가장 많은 클래스 비교
                 sorted_classes = sorted(class_counts.items(), key=lambda x: x[1])
-                print(f"   가장 적은 클래스 샘플링 비율:")
-                for class_id, count in sorted_classes[:3]:
-                    weight = class_weights[class_id]
-                    print(f"     Class {class_id}: {count}개 → weight {weight:.4f} (샘플링 확률 {weight*count:.1f}배)")
+                min_class_id, min_count = sorted_classes[0]
+                max_class_id, max_count = sorted_classes[-1]
+
+                min_weight = class_weights[min_class_id]
+                max_weight = class_weights[max_class_id]
+                sampling_ratio = min_weight / max_weight  # 최소 클래스가 최대 클래스 대비 몇 배 더 자주 샘플링되는지
+
+                print(f"   클래스별 샘플링 가중치:")
+                print(f"     최소 클래스 {min_class_id}: {min_count}개 → weight {min_weight:.4f}")
+                print(f"     최대 클래스 {max_class_id}: {max_count}개 → weight {max_weight:.4f}")
+                print(f"     → 최소 클래스가 최대 클래스보다 {sampling_ratio:.1f}배 더 자주 샘플링됨")
 
         train_loader = DataLoader(
             train_dataset,

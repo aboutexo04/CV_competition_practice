@@ -66,21 +66,21 @@ def train(
     subset_ratio=1.0,
 
     # Augmentation settings
-    aug_strategy='auto',
+    aug_strategy='hybrid',
     augraphy_strength='light',
 
     # Training settings
     epochs=20,
     lr=0.0001,
     patience=5,
-    early_stopping_delta=0.001,
+    early_stopping_delta=0,
     n_folds=5,
 
     # Advanced settings
     use_label_smoothing=False,
     label_smoothing_factor=0.1,
     use_tta=False,
-    use_balanced_sampling=False,
+    use_balanced_sampling=True,
 
     # Submission settings
     create_submission=True,
