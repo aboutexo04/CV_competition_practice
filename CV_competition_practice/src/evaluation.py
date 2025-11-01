@@ -244,31 +244,59 @@ def test_time_augmentation(model, images, device, tta_transforms=None):
     averaged_probs = torch.stack(predictions).mean(dim=0)
     
     return averaged_probs
-def evaluate_ensemble(fold_results, test_dataset, config,use_tta=False, tta_transforms=None):
+def evaluate_ensemble(fold_results, test_dataset, config, use_tta=False, tta_transforms=None, top_k_folds=None):
     """
     K-Fold 모델들의 앙상블 평가 (Config 기반)
-    
+
     Args:
         fold_results: K-Fold 학습 결과
         test_dataset: 테스트 데이터셋
         config: Config 객체
-    
+        use_tta: TTA 사용 여부
+        tta_transforms: TTA 변환 리스트
+        top_k_folds: 상위 K개 폴드만 사용 (None이면 모든 폴드 사용)
+
     Returns:
         test_acc, test_f1, ensemble_preds, test_labels
     """
     from src.model import get_model
-    
+
     device = config.DEVICE
     batch_size = config.BATCH_SIZE
     num_classes = config.NUM_CLASSES
     model_name = config.MODEL_NAME
-    
+
+    # Top K folds 선택
+    selected_fold_results = fold_results
+    if top_k_folds is not None and top_k_folds > 0 and top_k_folds < len(fold_results):
+        # Validation F1 스코어로 정렬 (내림차순)
+        sorted_results = sorted(fold_results, key=lambda x: x.get('best_val_f1', 0), reverse=True)
+        selected_fold_results = sorted_results[:top_k_folds]
+
+        print(f"\n🎯 상위 {top_k_folds}개 폴드만 앙상블에 사용합니다:")
+        for i, result in enumerate(selected_fold_results, 1):
+            fold_num = result.get('fold', i)
+            val_f1 = result.get('best_val_f1', 0)
+            print(f"  {i}. Fold {fold_num}: Val F1 = {val_f1:.4f}")
+
+        # 제외된 폴드 정보
+        excluded_results = sorted_results[top_k_folds:]
+        if excluded_results:
+            print(f"\n⚠️  제외된 폴드 ({len(excluded_results)}개):")
+            for result in excluded_results:
+                fold_num = result.get('fold', '?')
+                val_f1 = result.get('best_val_f1', 0)
+                print(f"  Fold {fold_num}: Val F1 = {val_f1:.4f}")
+        print()
+    else:
+        print(f"\n🔮 모든 {len(fold_results)}개 폴드를 앙상블에 사용합니다.\n")
+
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     print("🔮 앙상블 예측 시작...")
     all_predictions = []
 
-    for fold_idx, fold_result in enumerate(fold_results):
+    for fold_idx, fold_result in enumerate(selected_fold_results):
         # 추론 시에는 dropout 비활성화 (dropout_rate=0.0)
         fold_model = get_model(model_name, num_classes, pretrained=False, dropout_rate=0.0)
         fold_model.load_state_dict(fold_result['best_model_state'])

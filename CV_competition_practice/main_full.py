@@ -85,6 +85,10 @@ def train(
     dropout_rate=0.3,
     weight_decay=5e-4,
 
+    # Ensemble settings
+    use_best_k_folds=False,
+    best_k_count=4,
+
     # Submission settings
     create_submission=True,
     save_fold_results=True,
@@ -121,6 +125,8 @@ def train(
         train_final_model: Create final model submission (model is always trained and saved)
         dropout_rate: Dropout rate for model (0.0-0.5 recommended)
         weight_decay: L2 regularization weight decay (1e-5 to 1e-3 recommended)
+        use_best_k_folds: Use only top K folds by validation F1 for ensemble (default: False)
+        best_k_count: Number of best folds to use when use_best_k_folds=True (default: 4)
         create_submission: Create submission file after training
         save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
@@ -338,7 +344,8 @@ def train(
                 test_dataset=test_dataset,
                 config=config,
                 use_tta=use_tta_flag,
-                tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original']
+                tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original'],
+                top_k_folds=best_k_count if use_best_k_folds else None
             )
 
             try:
