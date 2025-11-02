@@ -294,18 +294,25 @@ def evaluate_ensemble(fold_results, test_dataset, config, use_tta=False, tta_tra
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     print("🔮 앙상블 예측 시작...")
+    if use_tta:
+        print(f"✅ TTA 활성화: {tta_transforms}")
+    else:
+        print("❌ TTA 비활성화")
     all_predictions = []
 
     for fold_idx, fold_result in enumerate(selected_fold_results):
-        # 추론 시에는 dropout 비활성화 (dropout_rate=0.0)
-        fold_model = get_model(model_name, num_classes, pretrained=False, dropout_rate=0.0)
+        # 체크포인트와 같은 dropout_rate로 모델 생성 (eval 모드에서 자동 비활성화됨)
+        # fold_result에 dropout_rate 정보가 있으면 사용, 없으면 0.0
+        dropout_rate_for_model = fold_result.get('dropout_rate', 0.0)
+        fold_model = get_model(model_name, num_classes, pretrained=False, dropout_rate=dropout_rate_for_model)
         fold_model.load_state_dict(fold_result['best_model_state'])
         fold_model = fold_model.to(device)
         fold_model.eval()
 
         fold_preds = []
         with torch.no_grad():
-            for images, labels in tqdm(test_loader, desc=f"Fold {fold_idx + 1} 예측", leave=True):
+            desc = f"Fold {fold_idx + 1} {'(TTA)' if use_tta else ''}"
+            for images, labels in tqdm(test_loader, desc=desc, leave=True):
                 if use_tta:
                     # TTA 적용 - 텐서 반환
                     probs = test_time_augmentation(fold_model, images, device, tta_transforms)
@@ -318,7 +325,8 @@ def evaluate_ensemble(fold_results, test_dataset, config, use_tta=False, tta_tra
                     fold_preds.append(probs.cpu().numpy())
         fold_preds = np.concatenate(fold_preds, axis=0)
         all_predictions.append(fold_preds)
-        print(f"✅ Fold {fold_idx + 1} 예측 완료! (predictions shape: {fold_preds.shape})")  # ✅ shape 정보 추가
+        tta_status = "with TTA" if use_tta else "standard"
+        print(f"✅ Fold {fold_idx + 1} 예측 완료! ({tta_status}, shape: {fold_preds.shape})")  # ✅ shape 정보 추가
 
     # 앙상블 (평균)
     ensemble_probs = np.mean(all_predictions, axis=0)
@@ -723,9 +731,9 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config, train_d
     print("🚀 전체 평가 프로세스 시작")
     print("=" * 70)
 
-    # 1. 학습 곡선 시각화
-    print("\n📈 학습 곡선 시각화...")
-    plot_training_curves(fold_results)
+    # 1. 학습 곡선 시각화 (비활성화)
+    # print("\n📈 학습 곡선 시각화...")
+    # plot_training_curves(fold_results)
 
     # 2. Validation 데이터로 앙상블 평가
     print("\n🔮 Validation 앙상블 예측 시작...")
@@ -783,19 +791,19 @@ def run_full_evaluation(fold_results, test_dataset, class_names, config, train_d
     print(f"Validation Macro F1 Score: {val_f1:.4f}")
     print("=" * 70)
 
-    # 3. Confusion Matrix
-    print("\n📊 Confusion Matrix 생성...")
-    plot_confusion_matrix(all_val_labels, all_val_preds, class_names)
+    # 3. Confusion Matrix (비활성화)
+    # print("\n📊 Confusion Matrix 생성...")
+    # plot_confusion_matrix(all_val_labels, all_val_preds, class_names)
 
-    # 4. 오분류 분석
-    print("\n🔍 오분류 분석...")
-    analyze_misclassifications(
-        test_dataset_raw=train_dataset_raw,
-        test_labels=all_val_labels,
-        predictions=all_val_preds,
-        class_names=class_names,
-        fallback_dataset=None
-    )
+    # 4. 오분류 분석 (비활성화)
+    # print("\n🔍 오분류 분석...")
+    # analyze_misclassifications(
+    #     test_dataset_raw=train_dataset_raw,
+    #     test_labels=all_val_labels,
+    #     predictions=all_val_preds,
+    #     class_names=class_names,
+    #     fallback_dataset=None
+    # )
 
     # 5. Test 데이터 예측 (제출용)
     print("\n" + "=" * 70)

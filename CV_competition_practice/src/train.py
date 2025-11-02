@@ -532,9 +532,11 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
                 break
         
         # Fold 결과 저장
+        best_epoch = np.argmax(history['val_f1']) + 1
         fold_results.append({
             'fold': fold + 1,
             'best_val_f1': early_stopping.best_f1,
+            'best_epoch': best_epoch,
             'best_model_state': early_stopping.best_model_state,
             'history': history
         })
@@ -585,8 +587,10 @@ def run_kfold_training(train_dataset_raw, train_labels, config):
         models_dir = Path(getattr(config, 'MODELS_DIR', 'models'))
         models_dir.mkdir(exist_ok=True)
 
-        # Save model with descriptive filename
-        model_filename = f"{model_name}_best_f1_{best_f1:.4f}.pth"
+        # Save model with descriptive filename (including timestamp)
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_filename = f"{model_name}_best_f1_{best_f1:.4f}_{timestamp}.pth"
         model_path = models_dir / model_filename
 
         torch.save(best_fold['best_model_state'], model_path)
@@ -612,8 +616,8 @@ def train_on_full_data(train_dataset_raw, train_labels, fold_results, config):
     Returns:
         final_model_state: 최종 모델의 state_dict
     """
-    from src.model import create_model
-    from src.augmentation import get_augmentation
+    from src.model import get_model
+    from src.data import get_train_augmentation
     from torch.utils.data import DataLoader
     from pathlib import Path
 
@@ -631,11 +635,9 @@ def train_on_full_data(train_dataset_raw, train_labels, fold_results, config):
     # ============================================
     # 2. 데이터 준비
     # ============================================
-    train_transform = get_augmentation(
+    train_transform = get_train_augmentation(
         image_size=config.IMAGE_SIZE,
-        aug_strategy=config.AUG_STRATEGY,
-        augraphy_strength=config.AUGRAPHY_STRENGTH,
-        is_train=True
+        config=config
     )
 
     # Transform 적용
@@ -677,9 +679,10 @@ def train_on_full_data(train_dataset_raw, train_labels, fold_results, config):
     # ============================================
     # 4. 모델 생성
     # ============================================
-    model = create_model(
+    model = get_model(
         model_name=config.MODEL_NAME,
         num_classes=config.NUM_CLASSES,
+        pretrained=True,
         dropout_rate=config.DROPOUT_RATE
     ).to(config.DEVICE)
 
@@ -765,7 +768,10 @@ def train_on_full_data(train_dataset_raw, train_labels, fold_results, config):
     # 평균 validation F1 (참고용)
     avg_val_f1 = np.mean([r['best_val_f1'] for r in fold_results])
 
-    model_filename = f"{config.MODEL_NAME}_final_cvf1_{avg_val_f1:.4f}.pth"
+    # 타임스탬프 추가 (매번 새 파일로 저장)
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_filename = f"{config.MODEL_NAME}_final_cvf1_{avg_val_f1:.4f}_{timestamp}.pth"
     model_path = models_dir / model_filename
 
     torch.save(model.state_dict(), model_path)

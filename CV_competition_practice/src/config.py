@@ -108,6 +108,23 @@ class Config:
         # Model saving
         self.SAVE_MODEL = True
         self.MODELS_DIR = 'models'
+        self.TRAIN_FINAL_MODEL = False
+        self.USE_BEST_K_FOLDS = False
+        self.BEST_K_COUNT = 4
+        self.CREATE_SUBMISSION = True
+        self.SAVE_FOLD_RESULTS = True
+        self.USE_WANDB = False
+        self.WANDB_PROJECT = 'document-classification'
+        self.SEED = 42
+        self.NUM_WORKERS = 0
+        self.DROPOUT_RATE = 0.3
+        self.WEIGHT_DECAY = 5e-4
+        self.USE_LABEL_SMOOTHING = False
+        self.LABEL_SMOOTHING_FACTOR = 0.1
+        self.USE_TTA = True
+        self.USE_CLASS_BALANCED_SAMPLING = True
+        self.USE_CLASS_WEIGHTS = False
+        self.CLASS_WEIGHT_POWER = 0.7
     
     def to_dict(self):
         """Config를 딕셔너리로 변환"""
@@ -271,6 +288,19 @@ DEVICE = config.DEVICE
 device = config.DEVICE
 USE_TTA = config.USE_TTA
 TTA_TRANSFORMS = config.TTA_TRANSFORMS
+TRAIN_FINAL_MODEL = config.TRAIN_FINAL_MODEL
+USE_BEST_K_FOLDS = config.USE_BEST_K_FOLDS
+BEST_K_COUNT = config.BEST_K_COUNT
+CREATE_SUBMISSION = config.CREATE_SUBMISSION
+SAVE_FOLD_RESULTS = config.SAVE_FOLD_RESULTS
+USE_WANDB = config.USE_WANDB
+WANDB_PROJECT = config.WANDB_PROJECT
+SEED = config.SEED
+NUM_WORKERS = config.NUM_WORKERS
+DROPOUT_RATE = config.DROPOUT_RATE
+WEIGHT_DECAY = config.WEIGHT_DECAY
+USE_LABEL_SMOOTHING = config.USE_LABEL_SMOOTHING
+LABEL_SMOOTHING_FACTOR = config.LABEL_SMOOTHING_FACTOR
 
 # 편의 함수들
 def print_config():
@@ -307,6 +337,19 @@ __all__ = [
     'device',
     'USE_TTA',
     'TTA_TRANSFORMS',
+    'TRAIN_FINAL_MODEL',
+    'USE_BEST_K_FOLDS',
+    'BEST_K_COUNT',
+    'CREATE_SUBMISSION',
+    'SAVE_FOLD_RESULTS',
+    'USE_WANDB',
+    'WANDB_PROJECT',
+    'SEED',
+    'NUM_WORKERS',
+    'DROPOUT_RATE',
+    'WEIGHT_DECAY',
+    'USE_LABEL_SMOOTHING',
+    'LABEL_SMOOTHING_FACTOR',
     
     # 함수들
     'print_config',

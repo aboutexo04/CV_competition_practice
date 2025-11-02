@@ -30,6 +30,7 @@ Usage:
 import sys
 from pathlib import Path
 import torch
+import numpy as np
 import warnings
 import fire
 warnings.filterwarnings('ignore')
@@ -56,12 +57,12 @@ import pickle
 
 def train(
     # Model settings
-    model_name='efficientnet_b0',
+    model_name='tf_efficientnetv2_m',
 
     # Data settings
     dataset_type='document',
-    image_size=224,
-    batch_size=32,
+    image_size=380,
+    batch_size=16,
     use_subset=False,
     subset_ratio=1.0,
 
@@ -70,18 +71,18 @@ def train(
     augraphy_strength='light',
 
     # Training settings
-    epochs=20,
+    epochs=10,
     lr=0.0001,
-    patience=5,
+    patience=15,
     early_stopping_delta=0,
     n_folds=5,
 
     # Advanced settings
     use_label_smoothing=False,
     label_smoothing_factor=0.1,
-    use_tta=False,
+    use_tta=True,
     use_balanced_sampling=True,
-    train_final_model=True,
+    train_final_model=False,
     dropout_rate=0.3,
     weight_decay=5e-4,
 
@@ -99,7 +100,7 @@ def train(
 
     # Other settings
     seed=42,
-    num_workers=0,
+    num_workers=4,
 ):
     """
     Train model with specified parameters
@@ -242,14 +243,23 @@ def train(
     print("="*70)
 
     # ============================================
-    # 5. Train Final Model on Full Data (always)
+    # 5. Train Final Model on Full Data (optional)
     # ============================================
-    final_model_result = train_on_full_data(
-        train_dataset_raw=train_dataset_raw,
-        train_labels=train_labels,
-        fold_results=fold_results,
-        config=config
-    )
+    final_model_result = None
+    if train_final_model:
+        print("\n" + "="*70)
+        print("Training Final Model on Full Data")
+        print("="*70)
+        final_model_result = train_on_full_data(
+            train_dataset_raw=train_dataset_raw,
+            train_labels=train_labels,
+            fold_results=fold_results,
+            config=config
+        )
+    else:
+        print("\n" + "="*70)
+        print("Skipping Final Model Training (train_final_model=False)")
+        print("="*70)
 
     # ============================================
     # 6. Evaluation (if test data exists)
@@ -308,7 +318,13 @@ def train(
         results_dir = Path('results')
         results_dir.mkdir(exist_ok=True)
 
-        fold_results_path = results_dir / 'fold_results.pkl'
+        # 평균 F1과 타임스탬프 포함
+        from datetime import datetime
+        avg_f1 = np.mean([r['best_val_f1'] for r in fold_results])
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fold_results_filename = f'fold_results_{model_name}_cvf1_{avg_f1:.4f}_{timestamp}.pkl'
+        fold_results_path = results_dir / fold_results_filename
+
         with open(fold_results_path, 'wb') as f:
             pickle.dump(fold_results, f)
 
@@ -349,12 +365,13 @@ def train(
             )
 
             try:
+                suffix = 'kfold_tta' if use_tta_flag else 'kfold'
                 save_submission(
                     preds=predictions,
                     sample_path=config.SUBMISSION_PATH,
                     save_path=submission_dir,
                     f1_score=test_f1,
-                    suffix='kfold'
+                    suffix=suffix
                 )
             except Exception as e:
                 print(f"❌ Error: {e}")
@@ -364,7 +381,7 @@ def train(
         # ============================================
         # 10-2. Final Model (Full Data) Submission
         # ============================================
-        if config.TRAIN_FINAL_MODEL and final_model_result is not None:
+        if train_final_model and final_model_result is not None:
             print("\n" + "="*50)
             print("🚀 Final Model (100% data) Submission")
             print("="*50)
@@ -384,12 +401,13 @@ def train(
                 )
 
                 try:
+                    suffix = 'final_tta' if use_tta_flag else 'final'
                     save_submission(
                         preds=predictions,
                         sample_path=config.SUBMISSION_PATH,
                         save_path=submission_dir,
                         f1_score=final_model_result['avg_val_f1'],  # CV F1 참고용
-                        suffix='final'
+                        suffix=suffix
                     )
                 except Exception as e:
                     print(f"❌ Error: {e}")
@@ -406,7 +424,6 @@ def train(
     for result in fold_results:
         print(f"  Fold {result['fold']}: Val F1 = {result['best_val_f1']:.4f}")
 
-    import numpy as np
     avg_f1 = np.mean([r['best_val_f1'] for r in fold_results])
     std_f1 = np.std([r['best_val_f1'] for r in fold_results])
 

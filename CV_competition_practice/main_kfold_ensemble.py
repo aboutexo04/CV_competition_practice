@@ -181,6 +181,7 @@ def submit_from_checkpoints(
     n_folds=5,
     use_tta=False,
     batch_size=32,
+    dropout_rate=0.4,
     seed=42,
 ):
     """
@@ -235,6 +236,7 @@ def submit_from_checkpoints(
     from src.model import get_model
 
     config = DocumentConfig()
+    config.MODEL_NAME = model_name  # 명령줄에서 받은 model_name 사용
     config.BATCH_SIZE = batch_size
     device = config.DEVICE
 
@@ -253,12 +255,18 @@ def submit_from_checkpoints(
         print(f"\n  Loading fold {i+1}/{len(checkpoint_files)}...")
 
         # Create model
-        model = get_model(model_name, num_classes=num_classes, pretrained=False, dropout_rate=0.0)
+        model = get_model(model_name, num_classes=num_classes, pretrained=False, dropout_rate=dropout_rate)
 
         # Load checkpoint
         try:
             state_dict = torch.load(checkpoint_file, map_location=device)
-            model.load_state_dict(state_dict)
+            missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+            if missing_keys or unexpected_keys:
+                print(f"    ⚠️  Warning: Model structure mismatch")
+                if missing_keys:
+                    print(f"       Missing keys: {len(missing_keys)}")
+                if unexpected_keys:
+                    print(f"       Unexpected keys: {len(unexpected_keys)}")
             model = model.to(device)
             model.eval()
 
@@ -271,7 +279,8 @@ def submit_from_checkpoints(
                 'fold': i + 1,
                 'best_model_state': state_dict,
                 'best_val_f1': val_f1,
-                'best_epoch': 0  # Unknown
+                'best_epoch': 0,  # Unknown
+                'dropout_rate': dropout_rate  # dropout_rate 정보 추가
             })
 
             print(f"    ✅ Loaded: {checkpoint_file.name} (Val F1: {val_f1:.4f})")
