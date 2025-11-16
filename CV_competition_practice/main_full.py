@@ -30,6 +30,7 @@ Usage:
 import sys
 from pathlib import Path
 import torch
+import numpy as np
 import warnings
 import fire
 warnings.filterwarnings('ignore')
@@ -46,7 +47,7 @@ if str(project_root) not in sys.path:
 # ============================================
 from src.config import DocumentConfig
 from src.data import load_data
-from src.train import run_kfold_training
+from src.train import run_kfold_training, train_on_full_data
 from src.evaluation import run_full_evaluation, evaluate_ensemble
 from src.logger import log_experiment_results
 from src.submission import save_submission
@@ -56,31 +57,38 @@ import pickle
 
 def train(
     # Model settings
-    model_name='efficientnet_b0',
+    model_name='tf_efficientnetv2_m',
 
     # Data settings
     dataset_type='document',
-    image_size=224,
-    batch_size=32,
+    image_size=380,
+    batch_size=16,
     use_subset=False,
     subset_ratio=1.0,
 
     # Augmentation settings
-    aug_strategy='auto',
+    aug_strategy='hybrid',
     augraphy_strength='light',
 
     # Training settings
-    epochs=20,
+    epochs=10,
     lr=0.0001,
-    patience=5,
-    early_stopping_delta=0.001,
+    patience=15,
+    early_stopping_delta=0,
     n_folds=5,
 
     # Advanced settings
     use_label_smoothing=False,
     label_smoothing_factor=0.1,
-    use_tta=False,
-    use_balanced_sampling=False,
+    use_tta=True,
+    use_balanced_sampling=True,
+    train_final_model=False,
+    dropout_rate=0.3,
+    weight_decay=5e-4,
+
+    # Ensemble settings
+    use_best_k_folds=False,
+    best_k_count=4,
 
     # Submission settings
     create_submission=True,
@@ -92,7 +100,7 @@ def train(
 
     # Other settings
     seed=42,
-    num_workers=0,
+    num_workers=4,
 ):
     """
     Train model with specified parameters
@@ -115,6 +123,11 @@ def train(
         label_smoothing_factor: Label smoothing factor (0.0-1.0)
         use_tta: Use Test Time Augmentation
         use_balanced_sampling: Use class-balanced sampling (WeightedRandomSampler)
+        train_final_model: Create final model submission (model is always trained and saved)
+        dropout_rate: Dropout rate for model (0.0-0.5 recommended)
+        weight_decay: L2 regularization weight decay (1e-5 to 1e-3 recommended)
+        use_best_k_folds: Use only top K folds by validation F1 for ensemble (default: False)
+        best_k_count: Number of best folds to use when use_best_k_folds=True (default: 4)
         create_submission: Create submission file after training
         save_fold_results: Save fold results to file
         use_wandb: Enable Wandb logging
@@ -151,6 +164,9 @@ def train(
         LABEL_SMOOTHING_FACTOR=label_smoothing_factor,
         USE_TTA=use_tta,
         USE_CLASS_BALANCED_SAMPLING=use_balanced_sampling,
+        TRAIN_FINAL_MODEL=train_final_model,
+        DROPOUT_RATE=dropout_rate,
+        WEIGHT_DECAY=weight_decay,
         USE_WANDB=use_wandb,
         WANDB_PROJECT=wandb_project,
         SEED=seed,
@@ -225,9 +241,28 @@ def train(
     print("\n" + "="*70)
     print("K-Fold Training Complete!")
     print("="*70)
-        
+
     # ============================================
-    # 5. Evaluation (if test data exists)
+    # 5. Train Final Model on Full Data (optional)
+    # ============================================
+    final_model_result = None
+    if train_final_model:
+        print("\n" + "="*70)
+        print("Training Final Model on Full Data")
+        print("="*70)
+        final_model_result = train_on_full_data(
+            train_dataset_raw=train_dataset_raw,
+            train_labels=train_labels,
+            fold_results=fold_results,
+            config=config
+        )
+    else:
+        print("\n" + "="*70)
+        print("Skipping Final Model Training (train_final_model=False)")
+        print("="*70)
+
+    # ============================================
+    # 6. Evaluation (if test data exists)
     # ============================================
     if test_dataset is not None:
         print("\n" + "="*70)
@@ -252,7 +287,7 @@ def train(
         results = None
 
     # ============================================
-    # 6. Log Experiment Results
+    # 7. Log Experiment Results
     # ============================================
     print("\n" + "="*70)
     print("Saving Experiment Results")
@@ -265,7 +300,7 @@ def train(
     )
 
     # ============================================
-    # 7. Wandb Finish
+    # 8. Wandb Finish
     # ============================================
     if config.USE_WANDB:
         import wandb
@@ -273,7 +308,7 @@ def train(
         print("\nWandb finished")
 
     # ============================================
-    # 8. Save Fold Results (optional)
+    # 9. Save Fold Results (optional)
     # ============================================
     if save_fold_results:
         print("\n" + "="*70)
@@ -283,52 +318,102 @@ def train(
         results_dir = Path('results')
         results_dir.mkdir(exist_ok=True)
 
-        fold_results_path = results_dir / 'fold_results.pkl'
+        # 평균 F1과 타임스탬프 포함
+        from datetime import datetime
+        avg_f1 = np.mean([r['best_val_f1'] for r in fold_results])
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fold_results_filename = f'fold_results_{model_name}_cvf1_{avg_f1:.4f}_{timestamp}.pkl'
+        fold_results_path = results_dir / fold_results_filename
+
         with open(fold_results_path, 'wb') as f:
             pickle.dump(fold_results, f)
 
         print(f"✅ Fold results saved: {fold_results_path}")
 
     # ============================================
-    # 9. Create Submission File (optional)
+    # 10. Create Submission File (optional)
     # ============================================
     if create_submission and test_dataset is not None:
         print("\n" + "="*70)
-        print("Creating Submission File")
+        print("Creating Submission Files")
         print("="*70)
 
         submission_dir = Path('submissions')
         submission_dir.mkdir(exist_ok=True)
+
+        # ============================================
+        # 10-1. K-Fold Ensemble Submission
+        # ============================================
+        print("\n" + "="*50)
+        print("📊 K-Fold Ensemble Submission")
+        print("="*50)
 
         # Create submissions (standard and optionally TTA)
         tta_list = [False, True] if use_tta else [False]
 
         for use_tta_flag in tta_list:
             tta_label = "with TTA" if use_tta_flag else "standard"
-            print(f"\n{'🔄' if use_tta_flag else '📝'} Creating {tta_label} submission...")
+            print(f"\n{'🔄' if use_tta_flag else '📝'} Creating K-Fold ensemble {tta_label} submission...")
 
             _, test_f1, predictions, _ = evaluate_ensemble(
                 fold_results=fold_results,
                 test_dataset=test_dataset,
                 config=config,
                 use_tta=use_tta_flag,
-                tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original']
+                tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original'],
+                top_k_folds=best_k_count if use_best_k_folds else None
             )
 
             try:
+                suffix = 'kfold_tta' if use_tta_flag else 'kfold'
                 save_submission(
                     preds=predictions,
                     sample_path=config.SUBMISSION_PATH,
                     save_path=submission_dir,
-                    f1_score=test_f1
+                    f1_score=test_f1,
+                    suffix=suffix
                 )
             except Exception as e:
                 print(f"❌ Error: {e}")
                 if not use_tta_flag:  # Stop if standard submission fails
                     return
 
+        # ============================================
+        # 10-2. Final Model (Full Data) Submission
+        # ============================================
+        if train_final_model and final_model_result is not None:
+            print("\n" + "="*50)
+            print("🚀 Final Model (100% data) Submission")
+            print("="*50)
+
+            from src.evaluation import evaluate_single_model
+
+            for use_tta_flag in tta_list:
+                tta_label = "with TTA" if use_tta_flag else "standard"
+                print(f"\n{'🔄' if use_tta_flag else '📝'} Creating final model {tta_label} submission...")
+
+                _, test_f1, predictions, _ = evaluate_single_model(
+                    model=final_model_result['model'],
+                    test_dataset=test_dataset,
+                    config=config,
+                    use_tta=use_tta_flag,
+                    tta_transforms=['original', 'hflip', 'vflip', 'rotate90'] if use_tta_flag else ['original']
+                )
+
+                try:
+                    suffix = 'final_tta' if use_tta_flag else 'final'
+                    save_submission(
+                        preds=predictions,
+                        sample_path=config.SUBMISSION_PATH,
+                        save_path=submission_dir,
+                        f1_score=final_model_result['avg_val_f1'],  # CV F1 참고용
+                        suffix=suffix
+                    )
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+
     # ============================================
-    # 10. Summary
+    # 11. Summary
     # ============================================
     print("\n" + "="*70)
     print("Training Complete!")
@@ -339,7 +424,6 @@ def train(
     for result in fold_results:
         print(f"  Fold {result['fold']}: Val F1 = {result['best_val_f1']:.4f}")
 
-    import numpy as np
     avg_f1 = np.mean([r['best_val_f1'] for r in fold_results])
     std_f1 = np.std([r['best_val_f1'] for r in fold_results])
 
